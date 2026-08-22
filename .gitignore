@@ -1,0 +1,17 @@
+# Local workflow runs and downloaded marketplace evidence
+.work*/
+.superpowers/
+
+# Python caches and test artifacts
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.coverage
+htmlcov/
+
+# Local environment and editor files
+.env
+.env.*
+.DS_Store
+.idea/
+.vscode/

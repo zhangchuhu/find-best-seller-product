@@ -1,0 +1,869 @@
+{
+  "task_record_id": "rec_source",
+  "platform": "shein-us",
+  "queries": [
+    {
+      "query": "mini dress",
+      "observations": [
+        {
+          "query": "red fitted bow dress",
+          "rank": 1,
+          "is_ad": false,
+          "title": "Red Dress 300001",
+          "url": "https://us.shein.com/red-dress-p-300001.html?ref=fixture",
+          "product_id": "300001",
+          "thumbnail_url": null
+        },
+        {
+          "query": "red fitted bow dress",
+          "rank": 2,
+          "is_ad": false,
+          "title": "Red Dress 100001",
+          "url": "https://us.shein.com/red-dress-p-100001.html?ref=fixture",
+          "product_id": "100001",
+          "thumbnail_url": null
+        },
+        {
+          "query": "red fitted bow dress",
+          "rank": 3,
+          "is_ad": false,
+          "title": "Red Dress 300003",
+          "url": "https://us.shein.com/red-dress-p-300003.html?ref=fixture",
+          "product_id": "300003",
+          "thumbnail_url": null
+        },
+        {
+          "query": "red fitted bow dress",
+          "rank": 4,
+          "is_ad": false,
+          "title": "Red Dress 300004",
+          "url": "https://us.shein.com/red-dress-p-300004.html?ref=fixture",
+          "product_id": "300004",
+          "thumbnail_url": null
+        },
+        {
+          "query": "red fitted bow dress",
+          "rank": 5,
+          "is_ad": false,
+          "title": "Red Dress 100002",
+          "url": "https://us.shein.com/red-dress-p-100002.html?ref=fixture",
+          "product_id": "100002",
+          "thumbnail_url": null
+        },
+        {
+          "query": "red fitted bow dress",
+          "rank": 6,
+          "is_ad": false,
+          "title": "Red Dress 300006",
+          "url": "https://us.shein.com/red-dress-p-300006.html?ref=fixture",
+          "product_id": "300006",
+          "thumbnail_url": null
+        },
+        {
+          "query": "red fitted bow dress",
+          "rank": 7,
+          "is_ad": false,
+          "title": "Red Dress 300007",
+          "url": "https://us.shein.com/red-dress-p-300007.html?ref=fixture",
+          "product_id": "300007",
+          "thumbnail_url": null
+        },
+        {
+          "query": "red fitted bow dress",
+          "rank": 8,
+          "is_ad": false,
+          "title": "Red Dress 300008",
+          "url": "https://us.shein.com/red-dress-p-300008.html?ref=fixture",
+          "product_id": "300008",
+          "thumbnail_url": null
+        },
+        {
+          "query": "red fitted bow dress",
+          "rank": 9,
+          "is_ad": false,
+          "title": "Red Dress 300009",
+          "url": "https://us.shein.com/red-dress-p-300009.html?ref=fixture",
+          "product_id": "300009",
+          "thumbnail_url": null
+        },
+        {
+          "query": "red fitted bow dress",
+          "rank": 10,
+          "is_ad": false,
+          "title": "Red Dress 300010",
+          "url": "https://us.shein.com/red-dress-p-300010.html?ref=fixture",
+          "product_id": "300010",
+          "thumbnail_url": null
+        },
+        {
+          "query": "red fitted bow dress",
+          "rank": 11,
+          "is_ad": false,
+          "title": "Red Dress 300011",
+          "url": "https://us.shein.com/red-dress-p-300011.html?ref=fixture",
+          "product_id": "300011",
+          "thumbnail_url": null
+        },
+        {
+          "query": "red fitted bow dress",
+          "rank": 12,
+          "is_ad": false,
+          "title": "Red Dress 300012",
+          "url": "https://us.shein.com/red-dress-p-300012.html?ref=fixture",
+          "product_id": "300012",
+          "thumbnail_url": null
+        },
+        {
+          "query": "red fitted bow dress",
+          "rank": 13,
+          "is_ad": false,
+          "title": "Red Dress 300013",
+          "url": "https://us.shein.com/red-dress-p-300013.html?ref=fixture",
+          "product_id": "300013",
+          "thumbnail_url": null
+        },
+        {
+          "query": "red fitted bow dress",
+          "rank": 14,
+          "is_ad": false,
+          "title": "Red Dress 300014",
+          "url": "https://us.shein.com/red-dress-p-300014.html?ref=fixture",
+          "product_id": "300014",
+          "thumbnail_url": null
+        },
+        {
+          "query": "red fitted bow dress",
+          "rank": 15,
+          "is_ad": false,
+          "title": "Red Dress 300015",
+          "url": "https://us.shein.com/red-dress-p-300015.html?ref=fixture",
+          "product_id": "300015",
+          "thumbnail_url": null
+        },
+        {
+          "query": "red fitted bow dress",
+          "rank": 16,
+          "is_ad": false,
+          "title": "Red Dress 300016",
+          "url": "https://us.shein.com/red-dress-p-300016.html?ref=fixture",
+          "product_id": "300016",
+          "thumbnail_url": null
+        },
+        {
+          "query": "red fitted bow dress",
+          "rank": 17,
+          "is_ad": false,
+          "title": "Red Dress 300017",
+          "url": "https://us.shein.com/red-dress-p-300017.html?ref=fixture",
+          "product_id": "300017",
+          "thumbnail_url": null
+        },
+        {
+          "query": "red fitted bow dress",
+          "rank": 18,
+          "is_ad": false,
+          "title": "Red Dress 300018",
+          "url": "https://us.shein.com/red-dress-p-300018.html?ref=fixture",
+          "product_id": "300018",
+          "thumbnail_url": null
+        },
+        {
+          "query": "red fitted bow dress",
+          "rank": 19,
+          "is_ad": false,
+          "title": "Red Dress 300019",
+          "url": "https://us.shein.com/red-dress-p-300019.html?ref=fixture",
+          "product_id": "300019",
+          "thumbnail_url": null
+        },
+        {
+          "query": "red fitted bow dress",
+          "rank": 20,
+          "is_ad": false,
+          "title": "Red Dress 300020",
+          "url": "https://us.shein.com/red-dress-p-300020.html?ref=fixture",
+          "product_id": "300020",
+          "thumbnail_url": null
+        },
+        {
+          "query": "red fitted bow dress",
+          "rank": 21,
+          "is_ad": false,
+          "title": "Red Dress 300021",
+          "url": "https://us.shein.com/red-dress-p-300021.html?ref=fixture",
+          "product_id": "300021",
+          "thumbnail_url": null
+        },
+        {
+          "query": "red fitted bow dress",
+          "rank": 22,
+          "is_ad": false,
+          "title": "Red Dress 300022",
+          "url": "https://us.shein.com/red-dress-p-300022.html?ref=fixture",
+          "product_id": "300022",
+          "thumbnail_url": null
+        },
+        {
+          "query": "red fitted bow dress",
+          "rank": 23,
+          "is_ad": false,
+          "title": "Red Dress 300023",
+          "url": "https://us.shein.com/red-dress-p-300023.html?ref=fixture",
+          "product_id": "300023",
+          "thumbnail_url": null
+        },
+        {
+          "query": "red fitted bow dress",
+          "rank": 24,
+          "is_ad": false,
+          "title": "Red Dress 300024",
+          "url": "https://us.shein.com/red-dress-p-300024.html?ref=fixture",
+          "product_id": "300024",
+          "thumbnail_url": null
+        },
+        {
+          "query": "red fitted bow dress",
+          "rank": 25,
+          "is_ad": false,
+          "title": "Red Dress 300025",
+          "url": "https://us.shein.com/red-dress-p-300025.html?ref=fixture",
+          "product_id": "300025",
+          "thumbnail_url": null
+        },
+        {
+          "query": "red fitted bow dress",
+          "rank": 26,
+          "is_ad": false,
+          "title": "Red Dress 300026",
+          "url": "https://us.shein.com/red-dress-p-300026.html?ref=fixture",
+          "product_id": "300026",
+          "thumbnail_url": null
+        },
+        {
+          "query": "red fitted bow dress",
+          "rank": 27,
+          "is_ad": false,
+          "title": "Red Dress 300027",
+          "url": "https://us.shein.com/red-dress-p-300027.html?ref=fixture",
+          "product_id": "300027",
+          "thumbnail_url": null
+        },
+        {
+          "query": "red fitted bow dress",
+          "rank": 28,
+          "is_ad": false,
+          "title": "Red Dress 300028",
+          "url": "https://us.shein.com/red-dress-p-300028.html?ref=fixture",
+          "product_id": "300028",
+          "thumbnail_url": null
+        },
+        {
+          "query": "red fitted bow dress",
+          "rank": 29,
+          "is_ad": false,
+          "title": "Red Dress 300029",
+          "url": "https://us.shein.com/red-dress-p-300029.html?ref=fixture",
+          "product_id": "300029",
+          "thumbnail_url": null
+        },
+        {
+          "query": "red fitted bow dress",
+          "rank": 30,
+          "is_ad": false,
+          "title": "Red Dress 300030",
+          "url": "https://us.shein.com/red-dress-p-300030.html?ref=fixture",
+          "product_id": "300030",
+          "thumbnail_url": null
+        }
+      ]
+    },
+    {
+      "query": "puff sleeve mini dress",
+      "observations": [
+        {
+          "query": "red dress puff sleeves",
+          "rank": 1,
+          "is_ad": false,
+          "title": "Red Dress 100001",
+          "url": "https://us.shein.com/red-dress-p-100001.html?ref=fixture",
+          "product_id": "100001",
+          "thumbnail_url": null
+        },
+        {
+          "query": "red dress puff sleeves",
+          "rank": 2,
+          "is_ad": false,
+          "title": "Red Dress 300102",
+          "url": "https://us.shein.com/red-dress-p-300102.html?ref=fixture",
+          "product_id": "300102",
+          "thumbnail_url": null
+        },
+        {
+          "query": "red dress puff sleeves",
+          "rank": 3,
+          "is_ad": false,
+          "title": "Red Dress 300103",
+          "url": "https://us.shein.com/red-dress-p-300103.html?ref=fixture",
+          "product_id": "300103",
+          "thumbnail_url": null
+        },
+        {
+          "query": "red dress puff sleeves",
+          "rank": 4,
+          "is_ad": false,
+          "title": "Red Dress 100002",
+          "url": "https://us.shein.com/red-dress-p-100002.html?ref=fixture",
+          "product_id": "100002",
+          "thumbnail_url": null
+        },
+        {
+          "query": "red dress puff sleeves",
+          "rank": 5,
+          "is_ad": false,
+          "title": "Red Dress 300105",
+          "url": "https://us.shein.com/red-dress-p-300105.html?ref=fixture",
+          "product_id": "300105",
+          "thumbnail_url": null
+        },
+        {
+          "query": "red dress puff sleeves",
+          "rank": 6,
+          "is_ad": false,
+          "title": "Red Dress 300106",
+          "url": "https://us.shein.com/red-dress-p-300106.html?ref=fixture",
+          "product_id": "300106",
+          "thumbnail_url": null
+        },
+        {
+          "query": "red dress puff sleeves",
+          "rank": 7,
+          "is_ad": false,
+          "title": "Red Dress 300107",
+          "url": "https://us.shein.com/red-dress-p-300107.html?ref=fixture",
+          "product_id": "300107",
+          "thumbnail_url": null
+        },
+        {
+          "query": "red dress puff sleeves",
+          "rank": 8,
+          "is_ad": false,
+          "title": "Red Dress 300108",
+          "url": "https://us.shein.com/red-dress-p-300108.html?ref=fixture",
+          "product_id": "300108",
+          "thumbnail_url": null
+        },
+        {
+          "query": "red dress puff sleeves",
+          "rank": 9,
+          "is_ad": false,
+          "title": "Red Dress 300109",
+          "url": "https://us.shein.com/red-dress-p-300109.html?ref=fixture",
+          "product_id": "300109",
+          "thumbnail_url": null
+        },
+        {
+          "query": "red dress puff sleeves",
+          "rank": 10,
+          "is_ad": false,
+          "title": "Red Dress 300110",
+          "url": "https://us.shein.com/red-dress-p-300110.html?ref=fixture",
+          "product_id": "300110",
+          "thumbnail_url": null
+        },
+        {
+          "query": "red dress puff sleeves",
+          "rank": 11,
+          "is_ad": false,
+          "title": "Red Dress 300111",
+          "url": "https://us.shein.com/red-dress-p-300111.html?ref=fixture",
+          "product_id": "300111",
+          "thumbnail_url": null
+        },
+        {
+          "query": "red dress puff sleeves",
+          "rank": 12,
+          "is_ad": false,
+          "title": "Red Dress 300112",
+          "url": "https://us.shein.com/red-dress-p-300112.html?ref=fixture",
+          "product_id": "300112",
+          "thumbnail_url": null
+        },
+        {
+          "query": "red dress puff sleeves",
+          "rank": 13,
+          "is_ad": false,
+          "title": "Red Dress 300113",
+          "url": "https://us.shein.com/red-dress-p-300113.html?ref=fixture",
+          "product_id": "300113",
+          "thumbnail_url": null
+        },
+        {
+          "query": "red dress puff sleeves",
+          "rank": 14,
+          "is_ad": false,
+          "title": "Red Dress 300114",
+          "url": "https://us.shein.com/red-dress-p-300114.html?ref=fixture",
+          "product_id": "300114",
+          "thumbnail_url": null
+        },
+        {
+          "query": "red dress puff sleeves",
+          "rank": 15,
+          "is_ad": false,
+          "title": "Red Dress 300115",
+          "url": "https://us.shein.com/red-dress-p-300115.html?ref=fixture",
+          "product_id": "300115",
+          "thumbnail_url": null
+        },
+        {
+          "query": "red dress puff sleeves",
+          "rank": 16,
+          "is_ad": false,
+          "title": "Red Dress 300116",
+          "url": "https://us.shein.com/red-dress-p-300116.html?ref=fixture",
+          "product_id": "300116",
+          "thumbnail_url": null
+        },
+        {
+          "query": "red dress puff sleeves",
+          "rank": 17,
+          "is_ad": false,
+          "title": "Red Dress 300117",
+          "url": "https://us.shein.com/red-dress-p-300117.html?ref=fixture",
+          "product_id": "300117",
+          "thumbnail_url": null
+        },
+        {
+          "query": "red dress puff sleeves",
+          "rank": 18,
+          "is_ad": false,
+          "title": "Red Dress 300118",
+          "url": "https://us.shein.com/red-dress-p-300118.html?ref=fixture",
+          "product_id": "300118",
+          "thumbnail_url": null
+        },
+        {
+          "query": "red dress puff sleeves",
+          "rank": 19,
+          "is_ad": false,
+          "title": "Red Dress 300119",
+          "url": "https://us.shein.com/red-dress-p-300119.html?ref=fixture",
+          "product_id": "300119",
+          "thumbnail_url": null
+        },
+        {
+          "query": "red dress puff sleeves",
+          "rank": 20,
+          "is_ad": false,
+          "title": "Red Dress 300120",
+          "url": "https://us.shein.com/red-dress-p-300120.html?ref=fixture",
+          "product_id": "300120",
+          "thumbnail_url": null
+        },
+        {
+          "query": "red dress puff sleeves",
+          "rank": 21,
+          "is_ad": false,
+          "title": "Red Dress 300121",
+          "url": "https://us.shein.com/red-dress-p-300121.html?ref=fixture",
+          "product_id": "300121",
+          "thumbnail_url": null
+        },
+        {
+          "query": "red dress puff sleeves",
+          "rank": 22,
+          "is_ad": false,
+          "title": "Red Dress 300122",
+          "url": "https://us.shein.com/red-dress-p-300122.html?ref=fixture",
+          "product_id": "300122",
+          "thumbnail_url": null
+        },
+        {
+          "query": "red dress puff sleeves",
+          "rank": 23,
+          "is_ad": false,
+          "title": "Red Dress 300123",
+          "url": "https://us.shein.com/red-dress-p-300123.html?ref=fixture",
+          "product_id": "300123",
+          "thumbnail_url": null
+        },
+        {
+          "query": "red dress puff sleeves",
+          "rank": 24,
+          "is_ad": false,
+          "title": "Red Dress 300124",
+          "url": "https://us.shein.com/red-dress-p-300124.html?ref=fixture",
+          "product_id": "300124",
+          "thumbnail_url": null
+        },
+        {
+          "query": "red dress puff sleeves",
+          "rank": 25,
+          "is_ad": false,
+          "title": "Red Dress 300125",
+          "url": "https://us.shein.com/red-dress-p-300125.html?ref=fixture",
+          "product_id": "300125",
+          "thumbnail_url": null
+        },
+        {
+          "query": "red dress puff sleeves",
+          "rank": 26,
+          "is_ad": false,
+          "title": "Red Dress 300126",
+          "url": "https://us.shein.com/red-dress-p-300126.html?ref=fixture",
+          "product_id": "300126",
+          "thumbnail_url": null
+        },
+        {
+          "query": "red dress puff sleeves",
+          "rank": 27,
+          "is_ad": false,
+          "title": "Red Dress 300127",
+          "url": "https://us.shein.com/red-dress-p-300127.html?ref=fixture",
+          "product_id": "300127",
+          "thumbnail_url": null
+        },
+        {
+          "query": "red dress puff sleeves",
+          "rank": 28,
+          "is_ad": false,
+          "title": "Red Dress 300128",
+          "url": "https://us.shein.com/red-dress-p-300128.html?ref=fixture",
+          "product_id": "300128",
+          "thumbnail_url": null
+        },
+        {
+          "query": "red dress puff sleeves",
+          "rank": 29,
+          "is_ad": false,
+          "title": "Red Dress 300129",
+          "url": "https://us.shein.com/red-dress-p-300129.html?ref=fixture",
+          "product_id": "300129",
+          "thumbnail_url": null
+        },
+        {
+          "query": "red dress puff sleeves",
+          "rank": 30,
+          "is_ad": false,
+          "title": "Red Dress 300130",
+          "url": "https://us.shein.com/red-dress-p-300130.html?ref=fixture",
+          "product_id": "300130",
+          "thumbnail_url": null
+        }
+      ]
+    },
+    {
+      "query": "cocktail dress",
+      "observations": [
+        {
+          "query": "red dress bow detail",
+          "rank": 1,
+          "is_ad": false,
+          "title": "Red Dress 300201",
+          "url": "https://us.shein.com/red-dress-p-300201.html?ref=fixture",
+          "product_id": "300201",
+          "thumbnail_url": null
+        },
+        {
+          "query": "red dress bow detail",
+          "rank": 2,
+          "is_ad": false,
+          "title": "Red Dress 100002",
+          "url": "https://us.shein.com/red-dress-p-100002.html?ref=fixture",
+          "product_id": "100002",
+          "thumbnail_url": null
+        },
+        {
+          "query": "red dress bow detail",
+          "rank": 3,
+          "is_ad": false,
+          "title": "Red Dress 100001",
+          "url": "https://us.shein.com/red-dress-p-100001.html?ref=fixture",
+          "product_id": "100001",
+          "thumbnail_url": null
+        },
+        {
+          "query": "red dress bow detail",
+          "rank": 4,
+          "is_ad": false,
+          "title": "Red Dress 300204",
+          "url": "https://us.shein.com/red-dress-p-300204.html?ref=fixture",
+          "product_id": "300204",
+          "thumbnail_url": null
+        },
+        {
+          "query": "red dress bow detail",
+          "rank": 5,
+          "is_ad": false,
+          "title": "Red Dress 300205",
+          "url": "https://us.shein.com/red-dress-p-300205.html?ref=fixture",
+          "product_id": "300205",
+          "thumbnail_url": null
+        },
+        {
+          "query": "red dress bow detail",
+          "rank": 6,
+          "is_ad": false,
+          "title": "Red Dress 300206",
+          "url": "https://us.shein.com/red-dress-p-300206.html?ref=fixture",
+          "product_id": "300206",
+          "thumbnail_url": null
+        },
+        {
+          "query": "red dress bow detail",
+          "rank": 7,
+          "is_ad": false,
+          "title": "Red Dress 300207",
+          "url": "https://us.shein.com/red-dress-p-300207.html?ref=fixture",
+          "product_id": "300207",
+          "thumbnail_url": null
+        },
+        {
+          "query": "red dress bow detail",
+          "rank": 8,
+          "is_ad": false,
+          "title": "Red Dress 300208",
+          "url": "https://us.shein.com/red-dress-p-300208.html?ref=fixture",
+          "product_id": "300208",
+          "thumbnail_url": null
+        },
+        {
+          "query": "red dress bow detail",
+          "rank": 9,
+          "is_ad": false,
+          "title": "Red Dress 300209",
+          "url": "https://us.shein.com/red-dress-p-300209.html?ref=fixture",
+          "product_id": "300209",
+          "thumbnail_url": null
+        },
+        {
+          "query": "red dress bow detail",
+          "rank": 10,
+          "is_ad": false,
+          "title": "Red Dress 300210",
+          "url": "https://us.shein.com/red-dress-p-300210.html?ref=fixture",
+          "product_id": "300210",
+          "thumbnail_url": null
+        },
+        {
+          "query": "red dress bow detail",
+          "rank": 11,
+          "is_ad": false,
+          "title": "Red Dress 300211",
+          "url": "https://us.shein.com/red-dress-p-300211.html?ref=fixture",
+          "product_id": "300211",
+          "thumbnail_url": null
+        },
+        {
+          "query": "red dress bow detail",
+          "rank": 12,
+          "is_ad": false,
+          "title": "Red Dress 300212",
+          "url": "https://us.shein.com/red-dress-p-300212.html?ref=fixture",
+          "product_id": "300212",
+          "thumbnail_url": null
+        },
+        {
+          "query": "red dress bow detail",
+          "rank": 13,
+          "is_ad": false,
+          "title": "Red Dress 300213",
+          "url": "https://us.shein.com/red-dress-p-300213.html?ref=fixture",
+          "product_id": "300213",
+          "thumbnail_url": null
+        },
+        {
+          "query": "red dress bow detail",
+          "rank": 14,
+          "is_ad": false,
+          "title": "Red Dress 300214",
+          "url": "https://us.shein.com/red-dress-p-300214.html?ref=fixture",
+          "product_id": "300214",
+          "thumbnail_url": null
+        },
+        {
+          "query": "red dress bow detail",
+          "rank": 15,
+          "is_ad": false,
+          "title": "Red Dress 300215",
+          "url": "https://us.shein.com/red-dress-p-300215.html?ref=fixture",
+          "product_id": "300215",
+          "thumbnail_url": null
+        },
+        {
+          "query": "red dress bow detail",
+          "rank": 16,
+          "is_ad": false,
+          "title": "Red Dress 300216",
+          "url": "https://us.shein.com/red-dress-p-300216.html?ref=fixture",
+          "product_id": "300216",
+          "thumbnail_url": null
+        },
+        {
+          "query": "red dress bow detail",
+          "rank": 17,
+          "is_ad": false,
+          "title": "Red Dress 300217",
+          "url": "https://us.shein.com/red-dress-p-300217.html?ref=fixture",
+          "product_id": "300217",
+          "thumbnail_url": null
+        },
+        {
+          "query": "red dress bow detail",
+          "rank": 18,
+          "is_ad": false,
+          "title": "Red Dress 300218",
+          "url": "https://us.shein.com/red-dress-p-300218.html?ref=fixture",
+          "product_id": "300218",
+          "thumbnail_url": null
+        },
+        {
+          "query": "red dress bow detail",
+          "rank": 19,
+          "is_ad": false,
+          "title": "Red Dress 300219",
+          "url": "https://us.shein.com/red-dress-p-300219.html?ref=fixture",
+          "product_id": "300219",
+          "thumbnail_url": null
+        },
+        {
+          "query": "red dress bow detail",
+          "rank": 20,
+          "is_ad": false,
+          "title": "Red Dress 300220",
+          "url": "https://us.shein.com/red-dress-p-300220.html?ref=fixture",
+          "product_id": "300220",
+          "thumbnail_url": null
+        },
+        {
+          "query": "red dress bow detail",
+          "rank": 21,
+          "is_ad": false,
+          "title": "Red Dress 300221",
+          "url": "https://us.shein.com/red-dress-p-300221.html?ref=fixture",
+          "product_id": "300221",
+          "thumbnail_url": null
+        },
+        {
+          "query": "red dress bow detail",
+          "rank": 22,
+          "is_ad": false,
+          "title": "Red Dress 300222",
+          "url": "https://us.shein.com/red-dress-p-300222.html?ref=fixture",
+          "product_id": "300222",
+          "thumbnail_url": null
+        },
+        {
+          "query": "red dress bow detail",
+          "rank": 23,
+          "is_ad": false,
+          "title": "Red Dress 300223",
+          "url": "https://us.shein.com/red-dress-p-300223.html?ref=fixture",
+          "product_id": "300223",
+          "thumbnail_url": null
+        },
+        {
+          "query": "red dress bow detail",
+          "rank": 24,
+          "is_ad": false,
+          "title": "Red Dress 300224",
+          "url": "https://us.shein.com/red-dress-p-300224.html?ref=fixture",
+          "product_id": "300224",
+          "thumbnail_url": null
+        },
+        {
+          "query": "red dress bow detail",
+          "rank": 25,
+          "is_ad": false,
+          "title": "Red Dress 300225",
+          "url": "https://us.shein.com/red-dress-p-300225.html?ref=fixture",
+          "product_id": "300225",
+          "thumbnail_url": null
+        },
+        {
+          "query": "red dress bow detail",
+          "rank": 26,
+          "is_ad": false,
+          "title": "Red Dress 300226",
+          "url": "https://us.shein.com/red-dress-p-300226.html?ref=fixture",
+          "product_id": "300226",
+          "thumbnail_url": null
+        },
+        {
+          "query": "red dress bow detail",
+          "rank": 27,
+          "is_ad": false,
+          "title": "Red Dress 300227",
+          "url": "https://us.shein.com/red-dress-p-300227.html?ref=fixture",
+          "product_id": "300227",
+          "thumbnail_url": null
+        },
+        {
+          "query": "red dress bow detail",
+          "rank": 28,
+          "is_ad": false,
+          "title": "Red Dress 300228",
+          "url": "https://us.shein.com/red-dress-p-300228.html?ref=fixture",
+          "product_id": "300228",
+          "thumbnail_url": null
+        },
+        {
+          "query": "red dress bow detail",
+          "rank": 29,
+          "is_ad": false,
+          "title": "Red Dress 300229",
+          "url": "https://us.shein.com/red-dress-p-300229.html?ref=fixture",
+          "product_id": "300229",
+          "thumbnail_url": null
+        },
+        {
+          "query": "red dress bow detail",
+          "rank": 30,
+          "is_ad": false,
+          "title": "Red Dress 300230",
+          "url": "https://us.shein.com/red-dress-p-300230.html?ref=fixture",
+          "product_id": "300230",
+          "thumbnail_url": null
+        }
+      ]
+    }
+  ],
+  "details": [
+    {
+      "identity": "shein-us:100001",
+      "status": "qualified",
+      "reason": null,
+      "detail_url": "https://us.shein.com/red-dress-p-100001.html",
+      "product_id": "100001",
+      "title": "Red Bow Puff Sleeve Mini Dress",
+      "category": "mini dress",
+      "sold_display": "2k sold",
+      "reviews_display": "500",
+      "rating_display": "4.8",
+      "match_level": "同款",
+      "visual_features": [
+        "red",
+        "bow",
+        "puff sleeves"
+      ]
+    },
+    {
+      "identity": "shein-us:100002",
+      "status": "qualified",
+      "reason": null,
+      "detail_url": "https://us.shein.com/red-dress-p-100002.html",
+      "product_id": "100002",
+      "title": "Red Fitted Mini Dress",
+      "category": "mini dress",
+      "sold_display": "1.5k sold",
+      "reviews_display": "300",
+      "rating_display": "4.6",
+      "match_level": "高度相似",
+      "visual_features": [
+        "red",
+        "fitted",
+        "mini"
+      ]
+    }
+  ]
+}

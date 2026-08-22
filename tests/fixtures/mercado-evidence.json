@@ -1,0 +1,869 @@
+{
+  "task_record_id": "rec_source",
+  "platform": "mercado-libre-mx",
+  "queries": [
+    {
+      "query": "vestido",
+      "observations": [
+        {
+          "query": "vestido ajustado con moño",
+          "rank": 1,
+          "is_ad": false,
+          "title": "Vestido Rojo MLM400001",
+          "url": "https://articulo.mercadolibre.com.mx/MLM-400001-vestido-rojo?tracking_id=fixture",
+          "product_id": "MLM400001",
+          "thumbnail_url": null
+        },
+        {
+          "query": "vestido ajustado con moño",
+          "rank": 2,
+          "is_ad": false,
+          "title": "Vestido Rojo MLM200001",
+          "url": "https://articulo.mercadolibre.com.mx/MLM-200001-vestido-rojo?tracking_id=fixture",
+          "product_id": "MLM200001",
+          "thumbnail_url": null
+        },
+        {
+          "query": "vestido ajustado con moño",
+          "rank": 3,
+          "is_ad": false,
+          "title": "Vestido Rojo MLM400003",
+          "url": "https://articulo.mercadolibre.com.mx/MLM-400003-vestido-rojo?tracking_id=fixture",
+          "product_id": "MLM400003",
+          "thumbnail_url": null
+        },
+        {
+          "query": "vestido ajustado con moño",
+          "rank": 4,
+          "is_ad": false,
+          "title": "Vestido Rojo MLM400004",
+          "url": "https://articulo.mercadolibre.com.mx/MLM-400004-vestido-rojo?tracking_id=fixture",
+          "product_id": "MLM400004",
+          "thumbnail_url": null
+        },
+        {
+          "query": "vestido ajustado con moño",
+          "rank": 5,
+          "is_ad": false,
+          "title": "Vestido Rojo MLM200002",
+          "url": "https://articulo.mercadolibre.com.mx/MLM-200002-vestido-rojo?tracking_id=fixture",
+          "product_id": "MLM200002",
+          "thumbnail_url": null
+        },
+        {
+          "query": "vestido ajustado con moño",
+          "rank": 6,
+          "is_ad": false,
+          "title": "Vestido Rojo MLM400006",
+          "url": "https://articulo.mercadolibre.com.mx/MLM-400006-vestido-rojo?tracking_id=fixture",
+          "product_id": "MLM400006",
+          "thumbnail_url": null
+        },
+        {
+          "query": "vestido ajustado con moño",
+          "rank": 7,
+          "is_ad": false,
+          "title": "Vestido Rojo MLM400007",
+          "url": "https://articulo.mercadolibre.com.mx/MLM-400007-vestido-rojo?tracking_id=fixture",
+          "product_id": "MLM400007",
+          "thumbnail_url": null
+        },
+        {
+          "query": "vestido ajustado con moño",
+          "rank": 8,
+          "is_ad": false,
+          "title": "Vestido Rojo MLM400008",
+          "url": "https://articulo.mercadolibre.com.mx/MLM-400008-vestido-rojo?tracking_id=fixture",
+          "product_id": "MLM400008",
+          "thumbnail_url": null
+        },
+        {
+          "query": "vestido ajustado con moño",
+          "rank": 9,
+          "is_ad": false,
+          "title": "Vestido Rojo MLM400009",
+          "url": "https://articulo.mercadolibre.com.mx/MLM-400009-vestido-rojo?tracking_id=fixture",
+          "product_id": "MLM400009",
+          "thumbnail_url": null
+        },
+        {
+          "query": "vestido ajustado con moño",
+          "rank": 10,
+          "is_ad": false,
+          "title": "Vestido Rojo MLM400010",
+          "url": "https://articulo.mercadolibre.com.mx/MLM-400010-vestido-rojo?tracking_id=fixture",
+          "product_id": "MLM400010",
+          "thumbnail_url": null
+        },
+        {
+          "query": "vestido ajustado con moño",
+          "rank": 11,
+          "is_ad": false,
+          "title": "Vestido Rojo MLM400011",
+          "url": "https://articulo.mercadolibre.com.mx/MLM-400011-vestido-rojo?tracking_id=fixture",
+          "product_id": "MLM400011",
+          "thumbnail_url": null
+        },
+        {
+          "query": "vestido ajustado con moño",
+          "rank": 12,
+          "is_ad": false,
+          "title": "Vestido Rojo MLM400012",
+          "url": "https://articulo.mercadolibre.com.mx/MLM-400012-vestido-rojo?tracking_id=fixture",
+          "product_id": "MLM400012",
+          "thumbnail_url": null
+        },
+        {
+          "query": "vestido ajustado con moño",
+          "rank": 13,
+          "is_ad": false,
+          "title": "Vestido Rojo MLM400013",
+          "url": "https://articulo.mercadolibre.com.mx/MLM-400013-vestido-rojo?tracking_id=fixture",
+          "product_id": "MLM400013",
+          "thumbnail_url": null
+        },
+        {
+          "query": "vestido ajustado con moño",
+          "rank": 14,
+          "is_ad": false,
+          "title": "Vestido Rojo MLM400014",
+          "url": "https://articulo.mercadolibre.com.mx/MLM-400014-vestido-rojo?tracking_id=fixture",
+          "product_id": "MLM400014",
+          "thumbnail_url": null
+        },
+        {
+          "query": "vestido ajustado con moño",
+          "rank": 15,
+          "is_ad": false,
+          "title": "Vestido Rojo MLM400015",
+          "url": "https://articulo.mercadolibre.com.mx/MLM-400015-vestido-rojo?tracking_id=fixture",
+          "product_id": "MLM400015",
+          "thumbnail_url": null
+        },
+        {
+          "query": "vestido ajustado con moño",
+          "rank": 16,
+          "is_ad": false,
+          "title": "Vestido Rojo MLM400016",
+          "url": "https://articulo.mercadolibre.com.mx/MLM-400016-vestido-rojo?tracking_id=fixture",
+          "product_id": "MLM400016",
+          "thumbnail_url": null
+        },
+        {
+          "query": "vestido ajustado con moño",
+          "rank": 17,
+          "is_ad": false,
+          "title": "Vestido Rojo MLM400017",
+          "url": "https://articulo.mercadolibre.com.mx/MLM-400017-vestido-rojo?tracking_id=fixture",
+          "product_id": "MLM400017",
+          "thumbnail_url": null
+        },
+        {
+          "query": "vestido ajustado con moño",
+          "rank": 18,
+          "is_ad": false,
+          "title": "Vestido Rojo MLM400018",
+          "url": "https://articulo.mercadolibre.com.mx/MLM-400018-vestido-rojo?tracking_id=fixture",
+          "product_id": "MLM400018",
+          "thumbnail_url": null
+        },
+        {
+          "query": "vestido ajustado con moño",
+          "rank": 19,
+          "is_ad": false,
+          "title": "Vestido Rojo MLM400019",
+          "url": "https://articulo.mercadolibre.com.mx/MLM-400019-vestido-rojo?tracking_id=fixture",
+          "product_id": "MLM400019",
+          "thumbnail_url": null
+        },
+        {
+          "query": "vestido ajustado con moño",
+          "rank": 20,
+          "is_ad": false,
+          "title": "Vestido Rojo MLM400020",
+          "url": "https://articulo.mercadolibre.com.mx/MLM-400020-vestido-rojo?tracking_id=fixture",
+          "product_id": "MLM400020",
+          "thumbnail_url": null
+        },
+        {
+          "query": "vestido ajustado con moño",
+          "rank": 21,
+          "is_ad": false,
+          "title": "Vestido Rojo MLM400021",
+          "url": "https://articulo.mercadolibre.com.mx/MLM-400021-vestido-rojo?tracking_id=fixture",
+          "product_id": "MLM400021",
+          "thumbnail_url": null
+        },
+        {
+          "query": "vestido ajustado con moño",
+          "rank": 22,
+          "is_ad": false,
+          "title": "Vestido Rojo MLM400022",
+          "url": "https://articulo.mercadolibre.com.mx/MLM-400022-vestido-rojo?tracking_id=fixture",
+          "product_id": "MLM400022",
+          "thumbnail_url": null
+        },
+        {
+          "query": "vestido ajustado con moño",
+          "rank": 23,
+          "is_ad": false,
+          "title": "Vestido Rojo MLM400023",
+          "url": "https://articulo.mercadolibre.com.mx/MLM-400023-vestido-rojo?tracking_id=fixture",
+          "product_id": "MLM400023",
+          "thumbnail_url": null
+        },
+        {
+          "query": "vestido ajustado con moño",
+          "rank": 24,
+          "is_ad": false,
+          "title": "Vestido Rojo MLM400024",
+          "url": "https://articulo.mercadolibre.com.mx/MLM-400024-vestido-rojo?tracking_id=fixture",
+          "product_id": "MLM400024",
+          "thumbnail_url": null
+        },
+        {
+          "query": "vestido ajustado con moño",
+          "rank": 25,
+          "is_ad": false,
+          "title": "Vestido Rojo MLM400025",
+          "url": "https://articulo.mercadolibre.com.mx/MLM-400025-vestido-rojo?tracking_id=fixture",
+          "product_id": "MLM400025",
+          "thumbnail_url": null
+        },
+        {
+          "query": "vestido ajustado con moño",
+          "rank": 26,
+          "is_ad": false,
+          "title": "Vestido Rojo MLM400026",
+          "url": "https://articulo.mercadolibre.com.mx/MLM-400026-vestido-rojo?tracking_id=fixture",
+          "product_id": "MLM400026",
+          "thumbnail_url": null
+        },
+        {
+          "query": "vestido ajustado con moño",
+          "rank": 27,
+          "is_ad": false,
+          "title": "Vestido Rojo MLM400027",
+          "url": "https://articulo.mercadolibre.com.mx/MLM-400027-vestido-rojo?tracking_id=fixture",
+          "product_id": "MLM400027",
+          "thumbnail_url": null
+        },
+        {
+          "query": "vestido ajustado con moño",
+          "rank": 28,
+          "is_ad": false,
+          "title": "Vestido Rojo MLM400028",
+          "url": "https://articulo.mercadolibre.com.mx/MLM-400028-vestido-rojo?tracking_id=fixture",
+          "product_id": "MLM400028",
+          "thumbnail_url": null
+        },
+        {
+          "query": "vestido ajustado con moño",
+          "rank": 29,
+          "is_ad": false,
+          "title": "Vestido Rojo MLM400029",
+          "url": "https://articulo.mercadolibre.com.mx/MLM-400029-vestido-rojo?tracking_id=fixture",
+          "product_id": "MLM400029",
+          "thumbnail_url": null
+        },
+        {
+          "query": "vestido ajustado con moño",
+          "rank": 30,
+          "is_ad": false,
+          "title": "Vestido Rojo MLM400030",
+          "url": "https://articulo.mercadolibre.com.mx/MLM-400030-vestido-rojo?tracking_id=fixture",
+          "product_id": "MLM400030",
+          "thumbnail_url": null
+        }
+      ]
+    },
+    {
+      "query": "vestido manga abullonada",
+      "observations": [
+        {
+          "query": "vestido con mangas abullonadas",
+          "rank": 1,
+          "is_ad": false,
+          "title": "Vestido Rojo MLM200001",
+          "url": "https://articulo.mercadolibre.com.mx/MLM-200001-vestido-rojo?tracking_id=fixture",
+          "product_id": "MLM200001",
+          "thumbnail_url": null
+        },
+        {
+          "query": "vestido con mangas abullonadas",
+          "rank": 2,
+          "is_ad": false,
+          "title": "Vestido Rojo MLM400102",
+          "url": "https://articulo.mercadolibre.com.mx/MLM-400102-vestido-rojo?tracking_id=fixture",
+          "product_id": "MLM400102",
+          "thumbnail_url": null
+        },
+        {
+          "query": "vestido con mangas abullonadas",
+          "rank": 3,
+          "is_ad": false,
+          "title": "Vestido Rojo MLM400103",
+          "url": "https://articulo.mercadolibre.com.mx/MLM-400103-vestido-rojo?tracking_id=fixture",
+          "product_id": "MLM400103",
+          "thumbnail_url": null
+        },
+        {
+          "query": "vestido con mangas abullonadas",
+          "rank": 4,
+          "is_ad": false,
+          "title": "Vestido Rojo MLM200002",
+          "url": "https://articulo.mercadolibre.com.mx/MLM-200002-vestido-rojo?tracking_id=fixture",
+          "product_id": "MLM200002",
+          "thumbnail_url": null
+        },
+        {
+          "query": "vestido con mangas abullonadas",
+          "rank": 5,
+          "is_ad": false,
+          "title": "Vestido Rojo MLM400105",
+          "url": "https://articulo.mercadolibre.com.mx/MLM-400105-vestido-rojo?tracking_id=fixture",
+          "product_id": "MLM400105",
+          "thumbnail_url": null
+        },
+        {
+          "query": "vestido con mangas abullonadas",
+          "rank": 6,
+          "is_ad": false,
+          "title": "Vestido Rojo MLM400106",
+          "url": "https://articulo.mercadolibre.com.mx/MLM-400106-vestido-rojo?tracking_id=fixture",
+          "product_id": "MLM400106",
+          "thumbnail_url": null
+        },
+        {
+          "query": "vestido con mangas abullonadas",
+          "rank": 7,
+          "is_ad": false,
+          "title": "Vestido Rojo MLM400107",
+          "url": "https://articulo.mercadolibre.com.mx/MLM-400107-vestido-rojo?tracking_id=fixture",
+          "product_id": "MLM400107",
+          "thumbnail_url": null
+        },
+        {
+          "query": "vestido con mangas abullonadas",
+          "rank": 8,
+          "is_ad": false,
+          "title": "Vestido Rojo MLM400108",
+          "url": "https://articulo.mercadolibre.com.mx/MLM-400108-vestido-rojo?tracking_id=fixture",
+          "product_id": "MLM400108",
+          "thumbnail_url": null
+        },
+        {
+          "query": "vestido con mangas abullonadas",
+          "rank": 9,
+          "is_ad": false,
+          "title": "Vestido Rojo MLM400109",
+          "url": "https://articulo.mercadolibre.com.mx/MLM-400109-vestido-rojo?tracking_id=fixture",
+          "product_id": "MLM400109",
+          "thumbnail_url": null
+        },
+        {
+          "query": "vestido con mangas abullonadas",
+          "rank": 10,
+          "is_ad": false,
+          "title": "Vestido Rojo MLM400110",
+          "url": "https://articulo.mercadolibre.com.mx/MLM-400110-vestido-rojo?tracking_id=fixture",
+          "product_id": "MLM400110",
+          "thumbnail_url": null
+        },
+        {
+          "query": "vestido con mangas abullonadas",
+          "rank": 11,
+          "is_ad": false,
+          "title": "Vestido Rojo MLM400111",
+          "url": "https://articulo.mercadolibre.com.mx/MLM-400111-vestido-rojo?tracking_id=fixture",
+          "product_id": "MLM400111",
+          "thumbnail_url": null
+        },
+        {
+          "query": "vestido con mangas abullonadas",
+          "rank": 12,
+          "is_ad": false,
+          "title": "Vestido Rojo MLM400112",
+          "url": "https://articulo.mercadolibre.com.mx/MLM-400112-vestido-rojo?tracking_id=fixture",
+          "product_id": "MLM400112",
+          "thumbnail_url": null
+        },
+        {
+          "query": "vestido con mangas abullonadas",
+          "rank": 13,
+          "is_ad": false,
+          "title": "Vestido Rojo MLM400113",
+          "url": "https://articulo.mercadolibre.com.mx/MLM-400113-vestido-rojo?tracking_id=fixture",
+          "product_id": "MLM400113",
+          "thumbnail_url": null
+        },
+        {
+          "query": "vestido con mangas abullonadas",
+          "rank": 14,
+          "is_ad": false,
+          "title": "Vestido Rojo MLM400114",
+          "url": "https://articulo.mercadolibre.com.mx/MLM-400114-vestido-rojo?tracking_id=fixture",
+          "product_id": "MLM400114",
+          "thumbnail_url": null
+        },
+        {
+          "query": "vestido con mangas abullonadas",
+          "rank": 15,
+          "is_ad": false,
+          "title": "Vestido Rojo MLM400115",
+          "url": "https://articulo.mercadolibre.com.mx/MLM-400115-vestido-rojo?tracking_id=fixture",
+          "product_id": "MLM400115",
+          "thumbnail_url": null
+        },
+        {
+          "query": "vestido con mangas abullonadas",
+          "rank": 16,
+          "is_ad": false,
+          "title": "Vestido Rojo MLM400116",
+          "url": "https://articulo.mercadolibre.com.mx/MLM-400116-vestido-rojo?tracking_id=fixture",
+          "product_id": "MLM400116",
+          "thumbnail_url": null
+        },
+        {
+          "query": "vestido con mangas abullonadas",
+          "rank": 17,
+          "is_ad": false,
+          "title": "Vestido Rojo MLM400117",
+          "url": "https://articulo.mercadolibre.com.mx/MLM-400117-vestido-rojo?tracking_id=fixture",
+          "product_id": "MLM400117",
+          "thumbnail_url": null
+        },
+        {
+          "query": "vestido con mangas abullonadas",
+          "rank": 18,
+          "is_ad": false,
+          "title": "Vestido Rojo MLM400118",
+          "url": "https://articulo.mercadolibre.com.mx/MLM-400118-vestido-rojo?tracking_id=fixture",
+          "product_id": "MLM400118",
+          "thumbnail_url": null
+        },
+        {
+          "query": "vestido con mangas abullonadas",
+          "rank": 19,
+          "is_ad": false,
+          "title": "Vestido Rojo MLM400119",
+          "url": "https://articulo.mercadolibre.com.mx/MLM-400119-vestido-rojo?tracking_id=fixture",
+          "product_id": "MLM400119",
+          "thumbnail_url": null
+        },
+        {
+          "query": "vestido con mangas abullonadas",
+          "rank": 20,
+          "is_ad": false,
+          "title": "Vestido Rojo MLM400120",
+          "url": "https://articulo.mercadolibre.com.mx/MLM-400120-vestido-rojo?tracking_id=fixture",
+          "product_id": "MLM400120",
+          "thumbnail_url": null
+        },
+        {
+          "query": "vestido con mangas abullonadas",
+          "rank": 21,
+          "is_ad": false,
+          "title": "Vestido Rojo MLM400121",
+          "url": "https://articulo.mercadolibre.com.mx/MLM-400121-vestido-rojo?tracking_id=fixture",
+          "product_id": "MLM400121",
+          "thumbnail_url": null
+        },
+        {
+          "query": "vestido con mangas abullonadas",
+          "rank": 22,
+          "is_ad": false,
+          "title": "Vestido Rojo MLM400122",
+          "url": "https://articulo.mercadolibre.com.mx/MLM-400122-vestido-rojo?tracking_id=fixture",
+          "product_id": "MLM400122",
+          "thumbnail_url": null
+        },
+        {
+          "query": "vestido con mangas abullonadas",
+          "rank": 23,
+          "is_ad": false,
+          "title": "Vestido Rojo MLM400123",
+          "url": "https://articulo.mercadolibre.com.mx/MLM-400123-vestido-rojo?tracking_id=fixture",
+          "product_id": "MLM400123",
+          "thumbnail_url": null
+        },
+        {
+          "query": "vestido con mangas abullonadas",
+          "rank": 24,
+          "is_ad": false,
+          "title": "Vestido Rojo MLM400124",
+          "url": "https://articulo.mercadolibre.com.mx/MLM-400124-vestido-rojo?tracking_id=fixture",
+          "product_id": "MLM400124",
+          "thumbnail_url": null
+        },
+        {
+          "query": "vestido con mangas abullonadas",
+          "rank": 25,
+          "is_ad": false,
+          "title": "Vestido Rojo MLM400125",
+          "url": "https://articulo.mercadolibre.com.mx/MLM-400125-vestido-rojo?tracking_id=fixture",
+          "product_id": "MLM400125",
+          "thumbnail_url": null
+        },
+        {
+          "query": "vestido con mangas abullonadas",
+          "rank": 26,
+          "is_ad": false,
+          "title": "Vestido Rojo MLM400126",
+          "url": "https://articulo.mercadolibre.com.mx/MLM-400126-vestido-rojo?tracking_id=fixture",
+          "product_id": "MLM400126",
+          "thumbnail_url": null
+        },
+        {
+          "query": "vestido con mangas abullonadas",
+          "rank": 27,
+          "is_ad": false,
+          "title": "Vestido Rojo MLM400127",
+          "url": "https://articulo.mercadolibre.com.mx/MLM-400127-vestido-rojo?tracking_id=fixture",
+          "product_id": "MLM400127",
+          "thumbnail_url": null
+        },
+        {
+          "query": "vestido con mangas abullonadas",
+          "rank": 28,
+          "is_ad": false,
+          "title": "Vestido Rojo MLM400128",
+          "url": "https://articulo.mercadolibre.com.mx/MLM-400128-vestido-rojo?tracking_id=fixture",
+          "product_id": "MLM400128",
+          "thumbnail_url": null
+        },
+        {
+          "query": "vestido con mangas abullonadas",
+          "rank": 29,
+          "is_ad": false,
+          "title": "Vestido Rojo MLM400129",
+          "url": "https://articulo.mercadolibre.com.mx/MLM-400129-vestido-rojo?tracking_id=fixture",
+          "product_id": "MLM400129",
+          "thumbnail_url": null
+        },
+        {
+          "query": "vestido con mangas abullonadas",
+          "rank": 30,
+          "is_ad": false,
+          "title": "Vestido Rojo MLM400130",
+          "url": "https://articulo.mercadolibre.com.mx/MLM-400130-vestido-rojo?tracking_id=fixture",
+          "product_id": "MLM400130",
+          "thumbnail_url": null
+        }
+      ]
+    },
+    {
+      "query": "vestido cóctel",
+      "observations": [
+        {
+          "query": "vestido detalle moño",
+          "rank": 1,
+          "is_ad": false,
+          "title": "Vestido Rojo MLM400201",
+          "url": "https://articulo.mercadolibre.com.mx/MLM-400201-vestido-rojo?tracking_id=fixture",
+          "product_id": "MLM400201",
+          "thumbnail_url": null
+        },
+        {
+          "query": "vestido detalle moño",
+          "rank": 2,
+          "is_ad": false,
+          "title": "Vestido Rojo MLM200002",
+          "url": "https://articulo.mercadolibre.com.mx/MLM-200002-vestido-rojo?tracking_id=fixture",
+          "product_id": "MLM200002",
+          "thumbnail_url": null
+        },
+        {
+          "query": "vestido detalle moño",
+          "rank": 3,
+          "is_ad": false,
+          "title": "Vestido Rojo MLM200001",
+          "url": "https://articulo.mercadolibre.com.mx/MLM-200001-vestido-rojo?tracking_id=fixture",
+          "product_id": "MLM200001",
+          "thumbnail_url": null
+        },
+        {
+          "query": "vestido detalle moño",
+          "rank": 4,
+          "is_ad": false,
+          "title": "Vestido Rojo MLM400204",
+          "url": "https://articulo.mercadolibre.com.mx/MLM-400204-vestido-rojo?tracking_id=fixture",
+          "product_id": "MLM400204",
+          "thumbnail_url": null
+        },
+        {
+          "query": "vestido detalle moño",
+          "rank": 5,
+          "is_ad": false,
+          "title": "Vestido Rojo MLM400205",
+          "url": "https://articulo.mercadolibre.com.mx/MLM-400205-vestido-rojo?tracking_id=fixture",
+          "product_id": "MLM400205",
+          "thumbnail_url": null
+        },
+        {
+          "query": "vestido detalle moño",
+          "rank": 6,
+          "is_ad": false,
+          "title": "Vestido Rojo MLM400206",
+          "url": "https://articulo.mercadolibre.com.mx/MLM-400206-vestido-rojo?tracking_id=fixture",
+          "product_id": "MLM400206",
+          "thumbnail_url": null
+        },
+        {
+          "query": "vestido detalle moño",
+          "rank": 7,
+          "is_ad": false,
+          "title": "Vestido Rojo MLM400207",
+          "url": "https://articulo.mercadolibre.com.mx/MLM-400207-vestido-rojo?tracking_id=fixture",
+          "product_id": "MLM400207",
+          "thumbnail_url": null
+        },
+        {
+          "query": "vestido detalle moño",
+          "rank": 8,
+          "is_ad": false,
+          "title": "Vestido Rojo MLM400208",
+          "url": "https://articulo.mercadolibre.com.mx/MLM-400208-vestido-rojo?tracking_id=fixture",
+          "product_id": "MLM400208",
+          "thumbnail_url": null
+        },
+        {
+          "query": "vestido detalle moño",
+          "rank": 9,
+          "is_ad": false,
+          "title": "Vestido Rojo MLM400209",
+          "url": "https://articulo.mercadolibre.com.mx/MLM-400209-vestido-rojo?tracking_id=fixture",
+          "product_id": "MLM400209",
+          "thumbnail_url": null
+        },
+        {
+          "query": "vestido detalle moño",
+          "rank": 10,
+          "is_ad": false,
+          "title": "Vestido Rojo MLM400210",
+          "url": "https://articulo.mercadolibre.com.mx/MLM-400210-vestido-rojo?tracking_id=fixture",
+          "product_id": "MLM400210",
+          "thumbnail_url": null
+        },
+        {
+          "query": "vestido detalle moño",
+          "rank": 11,
+          "is_ad": false,
+          "title": "Vestido Rojo MLM400211",
+          "url": "https://articulo.mercadolibre.com.mx/MLM-400211-vestido-rojo?tracking_id=fixture",
+          "product_id": "MLM400211",
+          "thumbnail_url": null
+        },
+        {
+          "query": "vestido detalle moño",
+          "rank": 12,
+          "is_ad": false,
+          "title": "Vestido Rojo MLM400212",
+          "url": "https://articulo.mercadolibre.com.mx/MLM-400212-vestido-rojo?tracking_id=fixture",
+          "product_id": "MLM400212",
+          "thumbnail_url": null
+        },
+        {
+          "query": "vestido detalle moño",
+          "rank": 13,
+          "is_ad": false,
+          "title": "Vestido Rojo MLM400213",
+          "url": "https://articulo.mercadolibre.com.mx/MLM-400213-vestido-rojo?tracking_id=fixture",
+          "product_id": "MLM400213",
+          "thumbnail_url": null
+        },
+        {
+          "query": "vestido detalle moño",
+          "rank": 14,
+          "is_ad": false,
+          "title": "Vestido Rojo MLM400214",
+          "url": "https://articulo.mercadolibre.com.mx/MLM-400214-vestido-rojo?tracking_id=fixture",
+          "product_id": "MLM400214",
+          "thumbnail_url": null
+        },
+        {
+          "query": "vestido detalle moño",
+          "rank": 15,
+          "is_ad": false,
+          "title": "Vestido Rojo MLM400215",
+          "url": "https://articulo.mercadolibre.com.mx/MLM-400215-vestido-rojo?tracking_id=fixture",
+          "product_id": "MLM400215",
+          "thumbnail_url": null
+        },
+        {
+          "query": "vestido detalle moño",
+          "rank": 16,
+          "is_ad": false,
+          "title": "Vestido Rojo MLM400216",
+          "url": "https://articulo.mercadolibre.com.mx/MLM-400216-vestido-rojo?tracking_id=fixture",
+          "product_id": "MLM400216",
+          "thumbnail_url": null
+        },
+        {
+          "query": "vestido detalle moño",
+          "rank": 17,
+          "is_ad": false,
+          "title": "Vestido Rojo MLM400217",
+          "url": "https://articulo.mercadolibre.com.mx/MLM-400217-vestido-rojo?tracking_id=fixture",
+          "product_id": "MLM400217",
+          "thumbnail_url": null
+        },
+        {
+          "query": "vestido detalle moño",
+          "rank": 18,
+          "is_ad": false,
+          "title": "Vestido Rojo MLM400218",
+          "url": "https://articulo.mercadolibre.com.mx/MLM-400218-vestido-rojo?tracking_id=fixture",
+          "product_id": "MLM400218",
+          "thumbnail_url": null
+        },
+        {
+          "query": "vestido detalle moño",
+          "rank": 19,
+          "is_ad": false,
+          "title": "Vestido Rojo MLM400219",
+          "url": "https://articulo.mercadolibre.com.mx/MLM-400219-vestido-rojo?tracking_id=fixture",
+          "product_id": "MLM400219",
+          "thumbnail_url": null
+        },
+        {
+          "query": "vestido detalle moño",
+          "rank": 20,
+          "is_ad": false,
+          "title": "Vestido Rojo MLM400220",
+          "url": "https://articulo.mercadolibre.com.mx/MLM-400220-vestido-rojo?tracking_id=fixture",
+          "product_id": "MLM400220",
+          "thumbnail_url": null
+        },
+        {
+          "query": "vestido detalle moño",
+          "rank": 21,
+          "is_ad": false,
+          "title": "Vestido Rojo MLM400221",
+          "url": "https://articulo.mercadolibre.com.mx/MLM-400221-vestido-rojo?tracking_id=fixture",
+          "product_id": "MLM400221",
+          "thumbnail_url": null
+        },
+        {
+          "query": "vestido detalle moño",
+          "rank": 22,
+          "is_ad": false,
+          "title": "Vestido Rojo MLM400222",
+          "url": "https://articulo.mercadolibre.com.mx/MLM-400222-vestido-rojo?tracking_id=fixture",
+          "product_id": "MLM400222",
+          "thumbnail_url": null
+        },
+        {
+          "query": "vestido detalle moño",
+          "rank": 23,
+          "is_ad": false,
+          "title": "Vestido Rojo MLM400223",
+          "url": "https://articulo.mercadolibre.com.mx/MLM-400223-vestido-rojo?tracking_id=fixture",
+          "product_id": "MLM400223",
+          "thumbnail_url": null
+        },
+        {
+          "query": "vestido detalle moño",
+          "rank": 24,
+          "is_ad": false,
+          "title": "Vestido Rojo MLM400224",
+          "url": "https://articulo.mercadolibre.com.mx/MLM-400224-vestido-rojo?tracking_id=fixture",
+          "product_id": "MLM400224",
+          "thumbnail_url": null
+        },
+        {
+          "query": "vestido detalle moño",
+          "rank": 25,
+          "is_ad": false,
+          "title": "Vestido Rojo MLM400225",
+          "url": "https://articulo.mercadolibre.com.mx/MLM-400225-vestido-rojo?tracking_id=fixture",
+          "product_id": "MLM400225",
+          "thumbnail_url": null
+        },
+        {
+          "query": "vestido detalle moño",
+          "rank": 26,
+          "is_ad": false,
+          "title": "Vestido Rojo MLM400226",
+          "url": "https://articulo.mercadolibre.com.mx/MLM-400226-vestido-rojo?tracking_id=fixture",
+          "product_id": "MLM400226",
+          "thumbnail_url": null
+        },
+        {
+          "query": "vestido detalle moño",
+          "rank": 27,
+          "is_ad": false,
+          "title": "Vestido Rojo MLM400227",
+          "url": "https://articulo.mercadolibre.com.mx/MLM-400227-vestido-rojo?tracking_id=fixture",
+          "product_id": "MLM400227",
+          "thumbnail_url": null
+        },
+        {
+          "query": "vestido detalle moño",
+          "rank": 28,
+          "is_ad": false,
+          "title": "Vestido Rojo MLM400228",
+          "url": "https://articulo.mercadolibre.com.mx/MLM-400228-vestido-rojo?tracking_id=fixture",
+          "product_id": "MLM400228",
+          "thumbnail_url": null
+        },
+        {
+          "query": "vestido detalle moño",
+          "rank": 29,
+          "is_ad": false,
+          "title": "Vestido Rojo MLM400229",
+          "url": "https://articulo.mercadolibre.com.mx/MLM-400229-vestido-rojo?tracking_id=fixture",
+          "product_id": "MLM400229",
+          "thumbnail_url": null
+        },
+        {
+          "query": "vestido detalle moño",
+          "rank": 30,
+          "is_ad": false,
+          "title": "Vestido Rojo MLM400230",
+          "url": "https://articulo.mercadolibre.com.mx/MLM-400230-vestido-rojo?tracking_id=fixture",
+          "product_id": "MLM400230",
+          "thumbnail_url": null
+        }
+      ]
+    }
+  ],
+  "details": [
+    {
+      "identity": "mercado-libre-mx:MLM200001",
+      "status": "qualified",
+      "reason": null,
+      "detail_url": "https://articulo.mercadolibre.com.mx/MLM-200001-vestido-rojo",
+      "product_id": "MLM200001",
+      "title": "Vestido Rojo Ajustado con Moño",
+      "category": "vestido corto",
+      "sold_display": "2 mil vendidos",
+      "reviews_display": "500",
+      "rating_display": "4.8",
+      "match_level": "同款",
+      "visual_features": [
+        "red",
+        "bow",
+        "puff sleeves"
+      ]
+    },
+    {
+      "identity": "mercado-libre-mx:MLM200002",
+      "status": "qualified",
+      "reason": null,
+      "detail_url": "https://articulo.mercadolibre.com.mx/MLM-200002-vestido-rojo",
+      "product_id": "MLM200002",
+      "title": "Vestido Rojo con Mangas Abullonadas",
+      "category": "vestido corto",
+      "sold_display": "1.5k vendidos",
+      "reviews_display": "300",
+      "rating_display": "4.6",
+      "match_level": "高度相似",
+      "visual_features": [
+        "red",
+        "fitted",
+        "mini"
+      ]
+    }
+  ]
+}

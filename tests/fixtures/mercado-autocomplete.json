@@ -1,0 +1,27 @@
+{
+  "task_record_id": "rec_source",
+  "platform": "mercado-libre-mx",
+  "seeds": [
+    {
+      "seed": "vestido",
+      "suggestions": [
+        {"rank": 1, "text": "vestido"},
+        {"rank": 2, "text": "vestido negro"}
+      ]
+    },
+    {
+      "seed": "vestido manga abullonada",
+      "suggestions": [
+        {"rank": 1, "text": "vestido manga abullonada"},
+        {"rank": 2, "text": "vestido manga larga"}
+      ]
+    },
+    {
+      "seed": "vestido cóctel",
+      "suggestions": [
+        {"rank": 1, "text": "vestido cóctel"},
+        {"rank": 2, "text": "vestido fiesta"}
+      ]
+    }
+  ]
+}
