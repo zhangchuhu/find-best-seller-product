@@ -576,14 +576,31 @@ def prepare(
     else:
         selected = sorted(tasks, key=lambda item: item.record_id)[0]
     root = Path(work_root).resolve()
+    run_dir = root / selected.record_id
+    try:
+        run_dir.mkdir(parents=True, exist_ok=True)
+    except OSError:
+        raise _error("run directory could not be initialized") from None
+    with _record_lock(run_dir):
+        return _prepare_locked(
+            selected, root, restart_analysis, lark, ark_client,
+        )
+
+
+def _prepare_locked(selected, root, restart_analysis, lark, ark_client):
+    """Persist a preparation while holding the record's workflow lock."""
     store = _store(root)
     try:
         checkpoint = store.load(selected.record_id)
     except Exception:
         raise _error("checkpoint could not be loaded") from None
-    if checkpoint is not None and restart_analysis and checkpoint["stage"] != "prepared":
+    if checkpoint is not None and restart_analysis and checkpoint["stage"] in {
+        "evidence_validated", "finalized",
+    }:
         raise _error("restart-analysis cannot invalidate validated evidence")
-    if checkpoint is not None and not restart_analysis:
+    if checkpoint is not None and (
+        not restart_analysis or checkpoint["stage"] == "queries_resolved"
+    ):
         payload = _prepared_payload(checkpoint, selected.record_id, root / selected.record_id)
         if payload["task"] != _task_dict(selected):
             raise _error("prepared task no longer matches Lark")

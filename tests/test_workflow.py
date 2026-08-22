@@ -261,18 +261,26 @@ class PrepareTests(unittest.TestCase):
             self.assertEqual(manifest["queries"], checkpoint["stages"]["queries_resolved"]["queries"])
             self.assertEqual(0o600, manifest_path.stat().st_mode & 0o777)
 
-    def test_resume_avoids_second_ark_call_and_restart_is_stage_safe(self):
+    def test_restart_through_direct_resolution_resumes_without_new_ark_analysis(self):
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
             _, lark, ark = prepare_only(root)
             prepare("rec_source", root, True, lark_client=lark, ark_client=ark)
             self.assertEqual(1, len(ark.calls))
-            with self.assertRaisesRegex(WorkflowError, "restart-analysis"):
-                prepare("rec_source", root, True, True, lark_client=lark, ark_client=ark)
+            prepare("rec_source", root, True, True, lark_client=lark, ark_client=ark)
             self.assertEqual(1, len(ark.calls))
             validate_evidence(root / "rec_source", evidence_fixture(root, "shein-evidence.json"))
             with self.assertRaisesRegex(WorkflowError, "restart-analysis"):
                 prepare("rec_source", root, True, True, lark_client=lark, ark_client=ark)
+
+    def test_prepare_uses_the_record_lock_before_writing_direct_resolution(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            real_lock = workflow_module._record_lock
+            with patch("scripts.workflow._record_lock", wraps=real_lock) as locked:
+                prepare_only(root)
+            self.assertEqual(1, locked.call_count)
+            self.assertEqual((root / "rec_source").resolve(), locked.call_args.args[0])
 
     def test_resume_rejects_a_missing_or_relocated_source_image(self):
         with tempfile.TemporaryDirectory() as directory:
@@ -801,6 +809,32 @@ class QueryResolutionTests(unittest.TestCase):
             prepare_only(root)
             self.assertIn("queries", json.loads((run_dir / "manifest.json").read_text(encoding="utf-8")))
 
+    def test_prepared_only_checkpoint_retry_persists_direct_resolution_and_repairs_manifest(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            original_save = CheckpointStore.save_stage
+
+            def crash_after_prepared(store, record_id, stage, payload):
+                if stage == "queries_resolved":
+                    raise RuntimeError("crash after prepared checkpoint")
+                return original_save(store, record_id, stage, payload)
+
+            with patch(
+                "scripts.workflow.CheckpointStore.save_stage",
+                autospec=True,
+                side_effect=crash_after_prepared,
+            ):
+                with self.assertRaisesRegex(WorkflowError, "prepared checkpoint could not be saved"):
+                    prepare_only(root)
+            self.assertEqual("prepared", CheckpointStore(root).load("rec_source")["stage"])
+            self.assertFalse((root / "rec_source" / "manifest.json").exists())
+
+            prepare_only(root)
+            checkpoint = CheckpointStore(root).load("rec_source")
+            self.assertEqual("queries_resolved", checkpoint["stage"])
+            manifest = json.loads((root / "rec_source" / "manifest.json").read_text(encoding="utf-8"))
+            self.assertEqual(["mini dress", "puff sleeve mini dress", "cocktail dress"], manifest["queries"])
+
     def test_direct_resolution_rejects_forged_source_marker_and_reordered_seeds(self):
         for mutation in (
             {"source": "autocomplete"},
@@ -818,7 +852,7 @@ class QueryResolutionTests(unittest.TestCase):
                         root / "rec_source", evidence_fixture(root, "shein-evidence.json"), clock=frozen_clock(),
                     )
 
-    def test_legacy_autocomplete_resolved_checkpoint_remains_replayable(self):
+    def test_legacy_autocomplete_resolved_checkpoint_validates_finalizes_and_replays(self):
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
             prepare_only(root)
@@ -834,6 +868,9 @@ class QueryResolutionTests(unittest.TestCase):
             )
             evidence = CheckpointStore(root).load("rec_source")["stages"]["evidence_validated"]
             self.assertIn("autocomplete_provenance", evidence)
+            lark = FakeLark()
+            self.assertIn("Finalized 2", finalize(root / "rec_source", lark_client=lark, clock=frozen_clock()))
+            self.assertIn("Already finalized 2", finalize(root / "rec_source", lark_client=lark, clock=frozen_clock()))
 
     def test_legacy_finalized_returns_without_parsing_obsolete_profile_or_writing(self):
         with tempfile.TemporaryDirectory() as directory:
