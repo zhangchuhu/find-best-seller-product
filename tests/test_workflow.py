@@ -261,13 +261,14 @@ class PrepareTests(unittest.TestCase):
             self.assertEqual(manifest["queries"], checkpoint["stages"]["queries_resolved"]["queries"])
             self.assertEqual(0o600, manifest_path.stat().st_mode & 0o777)
 
-    def test_restart_through_direct_resolution_resumes_without_new_ark_analysis(self):
+    def test_restart_after_direct_resolution_is_rejected_without_new_ark_analysis(self):
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
             _, lark, ark = prepare_only(root)
             prepare("rec_source", root, True, lark_client=lark, ark_client=ark)
             self.assertEqual(1, len(ark.calls))
-            prepare("rec_source", root, True, True, lark_client=lark, ark_client=ark)
+            with self.assertRaisesRegex(WorkflowError, "restart-analysis cannot replace direct queries"):
+                prepare("rec_source", root, True, True, lark_client=lark, ark_client=ark)
             self.assertEqual(1, len(ark.calls))
             validate_evidence(root / "rec_source", evidence_fixture(root, "shein-evidence.json"))
             with self.assertRaisesRegex(WorkflowError, "restart-analysis"):
@@ -1693,6 +1694,13 @@ class FinalizeTests(unittest.TestCase):
 
 
 class CliTests(unittest.TestCase):
+    def test_resolve_queries_cli_is_labeled_legacy_compatibility_only(self):
+        help_text = workflow_module._parser().format_help()
+        self.assertIn(
+            "Legacy version-2 autocomplete checkpoint compatibility only",
+            " ".join(help_text.split()),
+        )
+
     def test_main_prints_sanitized_workflow_errors(self):
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)

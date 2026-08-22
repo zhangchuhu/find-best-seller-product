@@ -74,7 +74,7 @@ text fields exactly and confirms a non-empty `原图` attachment list.
 
 ## Live finalization and status semantics
 
-One private no-follow interprocess lock per task record covers evidence validation and live finalization, including checkpoint load/compare/save, both schema
+One private no-follow interprocess lock per task record covers prepare direct binding, evidence validation, and live finalization, including checkpoint load/compare/save, both schema
 checks, exact task reread, result lookup/write, progress, status update, and
 final checkpoint save. This serializes operations only inside
 the supported single-host/local-work-root boundary. The fixed Result Base has

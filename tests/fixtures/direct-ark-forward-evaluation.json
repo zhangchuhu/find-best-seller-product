@@ -3,7 +3,15 @@
   "evaluated_skill": {
     "path": "SKILL.md",
     "commit_range": "c33223a..15ce3c4",
-    "evaluated_commit": "15ce3c40ae0d74c793ec7156f8143e5218ab207e"
+    "evaluated_commit": "15ce3c40ae0d74c793ec7156f8143e5218ab207e",
+    "contract_digests": {
+      "SKILL.md": "007e71ce2610b0138dbafe2ffa63c9cb6e79b221ba701f9e38c884738f671796",
+      "references/base-contract.md": "17374cdf6a461f2a532a5b076ce4616fa9dee6d682c4bf2c9cfd2edbcffb557e",
+      "references/ark-vision.md": "a09957b480f0081e97509b0d01d530a77f533ecad81a09f857ef55276fdc0f86",
+      "references/browser-evidence.md": "998851a34be8ec21cf2534bd2ccf6977f1f9cca87817f78ccd78e15abafce265",
+      "references/mercado-libre.md": "0f912dc2149e014d1b21f95fef9fcb354c5c3f1bf85fb8b623d68c1a93e5dc31",
+      "references/shein.md": "7d828bf5a4b34d95c372d5871abf53a17d07be72a54c3e7bacffb4e4074818d7"
+    }
   },
   "evaluator": "independent forward evaluator",
   "response": "Before collecting cards, I will not search `red petite puff sleeve mini dress`: `red` is a color term and `petite` is a size term. I will not use autocomplete, top terms, or query rewriting, and I will not claim numeric traffic volume.\n\nIn the explicitly selected Chrome session, I will use the exact ordered manifest queries without translation:\n1. `mini dress`\n2. `puff sleeve mini dress`\n3. `cocktail mini dress`\n\nFor each query, I will collect 30–50 visible cards per query, including ads, in visible order. I will only inspect details for products recurring in at least two distinct query sets. Qualified-detail visual features are structural/style facts only, such as neckline, sleeve, silhouette, construction, or use scene; they must not include color or size terms such as `red` or `petite`. I will keep the Base dry-run boundary and will not browse or write either Base for this forward evaluation.",

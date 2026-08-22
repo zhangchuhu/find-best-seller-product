@@ -237,7 +237,11 @@ class ArkTransportTests(unittest.TestCase):
         self.assertIn('"query_seeds": [', prompt)
         self.assertIn("Return only the raw JSON object", prompt)
         self.assertIn("replace every example value", prompt)
-        self.assertIn("not final queries", prompt)
+        self.assertIn("used unchanged as the final marketplace search queries", prompt)
+        self.assertIn("Seed 1 must use only category/subtype words", prompt)
+        self.assertIn("Seed 2 must repeat the category", prompt)
+        self.assertIn("Seed 3 must repeat the category", prompt)
+        self.assertNotIn("not final queries", prompt)
         self.assertIn("Never include color or size", prompt)
 
     def test_prompt_uses_a_mexican_spanish_response_reference_for_mercado(self):

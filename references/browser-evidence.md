@@ -57,8 +57,7 @@ deterministic UTC validation timestamp. Live finalization requires fresh
 evidence and rereads both schemas plus the exact task; stale evidence or a
 changed or non-pending task causes no Base mutation. After live progress, an
 exact normalized refresh may update freshness while preserving completed
-writes; any semantic change is rejected. Evidence validation and live
-finalization hold the same per-record interprocess lock across checkpoint
+writes; any semantic change is rejected. Prepare direct binding, evidence validation, and live finalization hold the same per-record interprocess lock across checkpoint
 load/compare/save, so refresh cannot overwrite newer live progress.
 
 If login, CAPTCHA, authentication, or a region wall blocks collection, stop,

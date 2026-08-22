@@ -319,7 +319,7 @@ def _prompt(platform: Platform) -> str:
         "2-5 distinct items; exclusions must contain 1-8 distinct items. query_seeds "
         "must contain exactly 3 distinct strings, each "
         f"3-120 characters. Set query_language to {language} and write every seed "
-        f"for the {language} marketplace. These are semantic seeds, not final queries. "
+        f"for the {language} marketplace. These three seeds are used unchanged as the final marketplace search queries. "
         "Seed 1 must use only category/subtype words. Seed 2 must repeat the category "
         "and include words copied from silhouette, selling_points, or construction. "
         "Seed 3 must repeat the category and include words copied from style or use_scene. "

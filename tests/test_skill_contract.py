@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import hashlib
 from pathlib import Path
 import re
 import unittest
@@ -273,6 +274,11 @@ class SkillContractTests(unittest.TestCase):
             with self.subTest(clause=clause):
                 self.assertIn(clause, text)
 
+    def test_autocomplete_module_is_explicitly_legacy_only(self):
+        text = read("scripts/autocomplete.py")
+        self.assertIn("Legacy version-2 compatibility-only", text)
+        self.assertIn("New direct-Ark runs do not invoke it", text)
+
     def test_forward_fixture_is_blind_and_keeps_the_required_pressure(self):
         text = read("tests/fixtures/direct-ark-forward-test.md")
         lowered = text.casefold()
@@ -323,6 +329,22 @@ class SkillContractTests(unittest.TestCase):
             artifact["scenario_path"],
         )
         self.assertTrue(artifact["evaluated_skill"]["commit_range"])
+        expected_digest_paths = [
+            "SKILL.md",
+            "references/base-contract.md",
+            "references/ark-vision.md",
+            "references/browser-evidence.md",
+            "references/mercado-libre.md",
+            "references/shein.md",
+        ]
+        self.assertEqual(expected_digest_paths, list(artifact["evaluated_skill"]["contract_digests"]))
+        self.assertEqual(
+            {
+                path: hashlib.sha256((ROOT / path).read_bytes()).hexdigest()
+                for path in expected_digest_paths
+            },
+            artifact["evaluated_skill"]["contract_digests"],
+        )
         self.assertEqual("PASS", artifact["rubric"]["verdict"])
 
         response = artifact["response"]
@@ -360,7 +382,7 @@ class SkillContractTests(unittest.TestCase):
             "same filename is not content identity",
             "single-host/local-work-root",
             "interprocess lock",
-            "evidence validation and live finalization",
+            "prepare direct binding, evidence validation, and live finalization",
             "writes-complete marker before `任务状态=成功`",
             "read-only reconciliation",
             "retryable operational failures leave `任务状态` as `未开始`",
@@ -382,6 +404,7 @@ class SkillContractTests(unittest.TestCase):
             "UTC validation timestamp",
             "fresh",
             "changed or non-pending",
+            "Prepare direct binding, evidence validation, and live finalization",
         ):
             self.assertIn(clause, browser)
 

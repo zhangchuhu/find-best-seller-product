@@ -594,13 +594,12 @@ def _prepare_locked(selected, root, restart_analysis, lark, ark_client):
         checkpoint = store.load(selected.record_id)
     except Exception:
         raise _error("checkpoint could not be loaded") from None
-    if checkpoint is not None and restart_analysis and checkpoint["stage"] in {
-        "evidence_validated", "finalized",
-    }:
-        raise _error("restart-analysis cannot invalidate validated evidence")
-    if checkpoint is not None and (
-        not restart_analysis or checkpoint["stage"] == "queries_resolved"
-    ):
+    if checkpoint is not None and restart_analysis:
+        if checkpoint["stage"] == "queries_resolved":
+            raise _error("restart-analysis cannot replace direct queries")
+        if checkpoint["stage"] != "prepared":
+            raise _error("restart-analysis cannot invalidate validated evidence")
+    if checkpoint is not None and not restart_analysis:
         payload = _prepared_payload(checkpoint, selected.record_id, root / selected.record_id)
         if payload["task"] != _task_dict(selected):
             raise _error("prepared task no longer matches Lark")
@@ -1242,12 +1241,12 @@ def _record_lock(run_dir: Path):
         try:
             fcntl.flock(descriptor, fcntl.LOCK_EX | fcntl.LOCK_NB)
         except BlockingIOError:
-            raise _error("live finalization lock is already held") from None
+            raise _error("record workflow lock is already held") from None
         yield
     except WorkflowError:
         raise
     except OSError:
-        raise _error("live finalization lock could not be acquired") from None
+        raise _error("record workflow lock could not be acquired") from None
     finally:
         if descriptor >= 0:
             try:
@@ -1488,7 +1487,11 @@ def _parser() -> argparse.ArgumentParser:
     validate_parser = commands.add_parser("validate-evidence")
     validate_parser.add_argument("--run-dir", required=True, type=Path)
     validate_parser.add_argument("--input", required=True, type=Path)
-    resolve_parser = commands.add_parser("resolve-queries")
+    resolve_parser = commands.add_parser(
+        "resolve-queries",
+        help="Legacy version-2 autocomplete checkpoint compatibility only",
+        description="Legacy version-2 autocomplete checkpoint compatibility only",
+    )
     resolve_parser.add_argument("--run-dir", required=True, type=Path)
     resolve_parser.add_argument("--input", required=True, type=Path)
     finalize_parser = commands.add_parser("finalize")

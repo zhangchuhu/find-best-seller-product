@@ -1,6 +1,6 @@
-"""Strict, pure resolution of marketplace autocomplete evidence.
+"""Legacy version-2 compatibility-only resolution of autocomplete evidence.
 
-The caller supplies only suggestions visibly captured in the selected Chrome
+New direct-Ark runs do not invoke it. The caller supplies only suggestions visibly captured in the selected Chrome
 session.  This module validates that evidence and chooses one displayed string
 per prepared seed; it never drives a browser, calls a service, or invents text.
 """
