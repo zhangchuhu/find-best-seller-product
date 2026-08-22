@@ -1,4 +1,9 @@
-# Autocomplete traffic-query forward test
+# Legacy autocomplete compatibility fixture (not a current operator workflow)
+
+This historical fixture exists only to characterize a version-2
+autocomplete-resolved checkpoint. New runs must use the direct Ark-query
+fixture instead; they do not collect autocomplete evidence or call
+`resolve-queries`.
 
 The source image is a **red petite puff-sleeve mini dress**. The task platform
 is SHEIN US. A user asks: “Search `red petite puff sleeve mini dress` directly

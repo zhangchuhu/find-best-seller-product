@@ -53,14 +53,13 @@ class SkillContractTests(unittest.TestCase):
         for term in ("飞书", "Ark Vision", "Chrome", "写回"):
             self.assertIn(term, parsed["default_prompt"])
 
-    def test_entrypoint_routes_six_references_and_orders_the_commands(self):
+    def test_entrypoint_routes_current_references_and_searches_direct_ark_queries(self):
         text = read("SKILL.md")
         targets = re.findall(r"\[[^]]+\]\((references/[^)]+\.md)\)", text)
         self.assertEqual(
             [
                 "references/base-contract.md",
                 "references/ark-vision.md",
-                "references/autocomplete-evidence.md",
                 "references/browser-evidence.md",
                 "references/mercado-libre.md",
                 "references/shein.md",
@@ -68,21 +67,17 @@ class SkillContractTests(unittest.TestCase):
             targets,
         )
         commands = re.findall(
-            r"python3 scripts/workflow\.py (prepare|resolve-queries|validate-evidence|finalize)",
+            r"python3 scripts/workflow\.py (prepare|validate-evidence|finalize)",
             text,
         )
         self.assertEqual(
-            ["prepare", "resolve-queries", "validate-evidence", "finalize"], commands
+            ["prepare", "validate-evidence", "finalize"], commands
         )
         prepare = text.index("1. Run `python3 scripts/workflow.py prepare")
-        autocomplete = text.index("For each seed, clear the platform's search box")
-        resolve = text.index("python3 scripts/workflow.py resolve-queries")
-        product_search = text.index("collect product-search evidence")
+        product_search = text.index("search the three manifest queries directly")
         validate = text.index("python3 scripts/workflow.py validate-evidence")
         finalize = text.index("python3 scripts/workflow.py finalize")
-        self.assertLess(prepare, autocomplete)
-        self.assertLess(autocomplete, resolve)
-        self.assertLess(resolve, product_search)
+        self.assertLess(prepare, product_search)
         self.assertLess(product_search, validate)
         self.assertLess(validate, finalize)
 
@@ -105,12 +100,10 @@ class SkillContractTests(unittest.TestCase):
             "Do not use another browser, generic web search, Python HTTP or scraping, Selenium, standalone/external Playwright, or a browser-server/hidden fallback",
             "Within selected Chrome, use only APIs documented by `chrome:control-chrome`, including its documented `tab.playwright` API",
             "The first real run uses one selected record and `--dry-run`",
-            "Ark produces exactly three color-free, size-free semantic seeds; it never produces final search queries",
-            "For each seed, clear the platform's search box before typing the seed",
-            "1–10 visible suggestion strings in displayed order",
-            "three resolved verbatim queries",
-            "Do not invent, reorder, translate, or rewrite a suggestion",
-            "Autocomplete display order is only a platform-derived traffic-intent proxy, not numeric search volume",
+            "Ark produces exactly three final marketplace queries",
+            "search the three manifest queries directly",
+            "byte-for-byte equal to the ordered Ark seeds",
+            "No autocomplete collection, suggestion ranking, query rewriting, translation, or traffic-volume claim",
             "exactly three queries",
             "30–50 visible cards per query",
             "at least two distinct query sets",
@@ -143,18 +136,13 @@ class SkillContractTests(unittest.TestCase):
         ):
             with self.subTest(contradiction=contradiction):
                 self.assertNotIn(contradiction, text)
-        self.assertIn(
-            "Autocomplete display order is only a platform-derived traffic-intent proxy, not numeric search volume",
-            entrypoint,
-        )
         report = re.search(r"Completion report: ([^.]+)\.", entrypoint)
         self.assertIsNotNone(report)
         report_fields = {item.strip() for item in report.group(1).split(";")}
         self.assertEqual(
             {
                 "record ID/SKU/platform",
-                "three per-seed autocomplete suggestion counts",
-                "three selected verbatim queries",
+                "three direct Ark queries",
                 "three per-query observation counts",
                 "recurring count",
                 "qualifying/written count",
@@ -226,7 +214,7 @@ class SkillContractTests(unittest.TestCase):
             "CAPTCHA",
             "cookies or storage",
             "Close only task-created tabs",
-            "resolved manifest queries exactly",
+            "direct Ark manifest queries exactly",
             "Color and size may remain only inside verbatim source fields",
             "must not enter `match_level`, `visual_features`, qualification/rejection, recurrence/ranking, or result visual text",
         ):
@@ -274,38 +262,33 @@ class SkillContractTests(unittest.TestCase):
                 with self.subTest(path=path, clause=clause):
                     self.assertIn(clause, text)
 
-    def test_autocomplete_reference_requires_visible_order_and_verbatim_resolution(self):
+    def test_autocomplete_reference_is_explicitly_legacy_only(self):
         text = " ".join(read("references/autocomplete-evidence.md").split())
         for clause in (
-            "visible autocomplete panel",
-            "first clear the platform's search box, then type that seed",
-            "Never append one seed to text left by another",
-            "1–10 visible suggestions in displayed order",
-            "not numeric search volume",
-            "never invents, removes words from, translates, reorders, or rewrites a suggestion",
-            "contains no color or size",
-            "same Chrome session",
+            "Legacy compatibility only",
+            "not part of a new direct-Ark run",
+            "version-2 checkpoint",
+            "resolve-queries",
         ):
             with self.subTest(clause=clause):
                 self.assertIn(clause, text)
 
     def test_forward_fixture_is_blind_and_keeps_the_required_pressure(self):
-        text = read("tests/fixtures/autocomplete-forward-test.md")
+        text = read("tests/fixtures/direct-ark-forward-test.md")
         lowered = text.casefold()
         for stimulus in (
             "red petite puff-sleeve mini dress",
-            "red petite puff sleeve mini dress",
             "mini dress",
             "puff sleeve mini dress",
             "cocktail mini dress",
-            "visible SHEIN autocomplete blocks",
+            "direct Ark queries",
             "Do not browse",
             "write either Base",
             "claim numeric search volume",
         ):
             with self.subTest(stimulus=stimulus):
                 self.assertIn(stimulus, text)
-        self.assertEqual(3, len(re.findall(r"(?m)^\w.*\n  1\..*\n  2\..*$", text)))
+        self.assertEqual(3, len(re.findall(r"(?m)^\d+\. `[^`]+`", text)))
         for leaked_label in ("correct behavior", "expected", "correct response"):
             with self.subTest(leaked_label=leaked_label):
                 self.assertNotIn(leaked_label, lowered)

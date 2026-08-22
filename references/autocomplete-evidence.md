@@ -1,4 +1,9 @@
-# Autocomplete evidence contract
+# Legacy autocomplete evidence contract
+
+**Legacy compatibility only.** This reference supports reading an already
+autocomplete-resolved version-2 checkpoint through the retained
+`resolve-queries` compatibility command. It is not part of a new direct-Ark
+run: new runs use the three final Ark manifest queries without autocomplete.
 
 Collect this evidence only from the visible autocomplete panel in the
 explicitly selected Chrome session for the target marketplace. Do not use a

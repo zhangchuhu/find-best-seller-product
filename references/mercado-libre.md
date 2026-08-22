@@ -1,7 +1,8 @@
 # Mercado Libre México evidence
 
 Use Mercado Libre México only. Search in Spanish (`es-MX`) with the three
-resolved manifest queries only, never Ark seeds. Color and size are not allowed
+direct Ark manifest queries only: the ordered Ark seeds are the final queries.
+Color and size are not allowed
 in queries or visual comparison; visible color/size text may remain only
 verbatim evidence. Accepted product URLs use HTTPS and the exact host
 `www.mercadolibre.com.mx` or a subdomain ending `.mercadolibre.com.mx`; other

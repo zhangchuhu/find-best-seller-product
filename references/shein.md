@@ -1,7 +1,8 @@
 # SHEIN US evidence
 
 Use the SHEIN US locale only. Search in English (`en-US`) with the three
-resolved manifest queries only, never Ark seeds. Color and size are not allowed
+direct Ark manifest queries only: the ordered Ark seeds are the final queries.
+Color and size are not allowed
 in queries or visual comparison; visible color/size text may remain only
 verbatim evidence. Accepted product URLs use HTTPS on exactly `us.shein.com`;
 other SHEIN locales and hosts are invalid.

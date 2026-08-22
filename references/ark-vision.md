@@ -65,9 +65,12 @@ The indexed seed roles are enforced from structured profile vocabulary:
 2. Seed 2: category/subtype + silhouette, construction, or an explicit selling point.
 3. Seed 3: category/subtype + an explicit style or use scene.
 
-`query_seeds` are short semantic inputs to marketplace autocomplete, not final
-queries. Every seed must use the selected marketplace language, contain the
-garment category vocabulary, be distinct, and omit color and size terms. Color
+`query_seeds` are the final marketplace queries for a new run, in their listed
+order and without rewriting, translation, autocomplete collection, suggestion
+ranking, or traffic-volume interpretation. Every one must use the selected
+marketplace language, contain garment-category vocabulary, be distinct, and
+omit color and size terms. Together, the indexed roles ensure category,
+construction/silhouette or selling-point, and style/use-scene evidence. Color
 remains descriptive source metadata only. Deterministic lexical checks reject
 missing role evidence, known generic fashion phrases, obvious wrong-market
 category words, category drift, and color/size vocabulary. This is a

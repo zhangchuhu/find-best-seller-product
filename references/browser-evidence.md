@@ -9,7 +9,9 @@ pre-existing tab.
 
 ## Search cards
 
-Use the three resolved manifest queries exactly, never Ark `query_seeds` or any other suggestion. Each evidence file has exactly 3 query blocks, and each block has exactly the keys `query` and `observations`. Capture
+Use the three direct Ark manifest queries exactly: they are byte-for-byte equal
+to the ordered Ark `query_seeds`, never autocomplete suggestions or rewritten
+terms. Each evidence file has exactly 3 query blocks, and each block has exactly the keys `query` and `observations`. Capture
 30–50 observations per query. Ranks are the canonical visible order after the
 page finishes rendering: contiguous, unique visible ranks `1..N`, including ads
 instead of renumbering organic items. Label an ad from visible marketplace
