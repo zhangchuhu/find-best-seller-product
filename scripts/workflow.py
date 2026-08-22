@@ -33,8 +33,9 @@ from scripts.query_terms import MARKETPLACE_LANGUAGES, contains_color_or_size
 
 
 NEXT_STEP = (
-    "Use the selected Chrome session to collect autocomplete JSON, then run "
-    "resolve-queries --run-dir <RUN_DIR> --input <AUTOCOMPLETE_JSON>."
+    "Use the selected Chrome session to collect evidence.json for the "
+    "manifest queries, then run validate-evidence --run-dir <RUN_DIR> "
+    "--input <EVIDENCE_JSON>."
 )
 _DEFAULT_CLOCK = lambda: datetime.now(timezone.utc)
 MAX_EVIDENCE_JSON_BYTES = 5 * 1024 * 1024
@@ -285,9 +286,8 @@ def _manifest_payload(
 ) -> dict[str, object]:
     """Return the only manifest layouts accepted by this workflow.
 
-    The prepared checkpoint owns all four base fields.  Resolution appends only
-    its three persisted, verbatim platform queries; callers never derive them
-    from Ark seeds.
+    The prepared checkpoint owns all four base fields. Resolution appends only
+    its three persisted, verbatim platform queries.
     """
     manifest = dict(prepared)
     if queries is not None:
@@ -295,22 +295,43 @@ def _manifest_payload(
     return manifest
 
 
+def _direct_resolution_payload(
+    prepared: Mapping[str, object],
+) -> tuple[dict[str, object], tuple[str, str, str]]:
+    """Build the sole direct resolution accepted for newly prepared runs."""
+    task = Task.from_dict(prepared["task"])
+    profile = VisualProfile.from_dict(prepared["visual_profile"], task.platform)
+    queries = profile.query_seeds
+    return {"source": "ark_seeds", "queries": list(queries)}, queries
+
+
 def _queries_resolved_payload(
     checkpoint: Mapping[str, object], record_id: str, run_dir: Path,
 ) -> tuple[dict[str, object], tuple[str, str, str]]:
-    """Validate persisted autocomplete provenance against the prepared state."""
+    """Validate either a direct Ark resolution or a legacy autocomplete one."""
     try:
         prepared = _prepared_payload(checkpoint, record_id, run_dir)
         stages = checkpoint["stages"]
         if not isinstance(stages, dict):
             raise ValueError
+        task = Task.from_dict(prepared["task"])
+        profile = VisualProfile.from_dict(prepared["visual_profile"], task.platform)
+        raw_resolved = stages["queries_resolved"]
+        if isinstance(raw_resolved, dict) and set(raw_resolved) == {"source", "queries"}:
+            resolved = _exact(raw_resolved, {"source", "queries"}, "resolved queries checkpoint")
+            queries = resolved["queries"]
+            if (
+                resolved["source"] != "ark_seeds"
+                or not isinstance(queries, list)
+                or tuple(queries) != profile.query_seeds
+            ):
+                raise ValueError
+            return resolved, profile.query_seeds
         resolved = _exact(
-            stages["queries_resolved"],
+            raw_resolved,
             {"autocomplete_evidence", "queries"},
             "resolved queries checkpoint",
         )
-        task = Task.from_dict(prepared["task"])
-        profile = VisualProfile.from_dict(prepared["visual_profile"], task.platform)
         parsed = resolve_autocomplete(
             resolved["autocomplete_evidence"],
             record_id=record_id,
@@ -340,6 +361,15 @@ def _autocomplete_provenance(
     }
 
 
+def _resolution_provenance(
+    resolved: Mapping[str, object], queries: tuple[str, str, str],
+) -> tuple[str, dict[str, object]]:
+    """Return the durable provenance layout for direct and legacy resolutions."""
+    if set(resolved) == {"source", "queries"}:
+        return "query_provenance", {"source": "ark_seeds", "queries": list(queries)}
+    return "autocomplete_provenance", _autocomplete_provenance(resolved, queries)
+
+
 def _canonical_evidence_digest(payload: Mapping[str, object]) -> str:
     """Return a deterministic integrity digest for replayed local evidence."""
     encoded = json.dumps(
@@ -349,20 +379,25 @@ def _canonical_evidence_digest(payload: Mapping[str, object]) -> str:
     return hashlib.sha256(encoded).hexdigest()
 
 
-def _validated_autocomplete_provenance(
+def _validated_resolution_provenance(
     evidence: Mapping[str, object],
     checkpoint: Mapping[str, object],
     record_id: str,
     run_dir: Path,
 ) -> tuple[str, str, str]:
-    """Bind validated product evidence to the durable autocomplete checkpoint."""
+    """Bind validated product evidence to the durable resolution checkpoint."""
     resolved, queries = _queries_resolved_payload(checkpoint, record_id, run_dir)
-    provenance = _exact(
-        evidence["autocomplete_provenance"],
-        {"autocomplete_evidence", "queries"},
-        "evidence autocomplete provenance",
-    )
-    if provenance != _autocomplete_provenance(resolved, queries):
+    provenance_key, expected = _resolution_provenance(resolved, queries)
+    if provenance_key == "query_provenance":
+        provenance = _exact(
+            evidence[provenance_key], {"source", "queries"}, "evidence query provenance",
+        )
+    else:
+        provenance = _exact(
+            evidence[provenance_key], {"autocomplete_evidence", "queries"},
+            "evidence autocomplete provenance",
+        )
+    if provenance != expected:
         raise ValueError
     return queries
 
@@ -554,6 +589,15 @@ def prepare(
             raise _error("prepared task no longer matches Lark")
         manifest_path = root / selected.record_id / "manifest.json"
         queries = None
+        if checkpoint.get("version") == 2 and checkpoint["stage"] == "prepared":
+            try:
+                resolution, queries = _direct_resolution_payload(payload)
+                store.save_stage(selected.record_id, "queries_resolved", resolution)
+                checkpoint = store.load(selected.record_id)
+                if checkpoint is None:
+                    raise ValueError
+            except Exception:
+                raise _error("resolved queries checkpoint could not be saved") from None
         if checkpoint.get("version") == 2 and checkpoint["stage"] != "prepared":
             _resolved, queries = _queries_resolved_payload(
                 checkpoint, selected.record_id, root / selected.record_id,
@@ -591,10 +635,12 @@ def prepare(
     }
     try:
         store.save_stage(selected.record_id, "prepared", payload)
+        resolution, queries = _direct_resolution_payload(payload)
+        store.save_stage(selected.record_id, "queries_resolved", resolution)
     except Exception:
         raise _error("prepared checkpoint could not be saved") from None
     manifest_path = run_dir / "manifest.json"
-    _write_json(manifest_path, payload)
+    _write_json(manifest_path, _manifest_payload(payload, queries))
     return f"Prepared {selected.record_id}; manifest: {manifest_path.absolute()}"
 
 
@@ -901,8 +947,9 @@ def _canonical_evidence_payload(
         raise _error("detail outcomes stopped before the recurring pool was exhausted")
     normalized_blocks.sort(key=lambda block: expected_queries.index(block["query"]))
     candidate_values = sorted((_candidate_dict(value) for value in candidates), key=lambda value: value["identity"])
+    provenance_key, provenance = _resolution_provenance(resolved, final_queries)
     payload = {
-        "autocomplete_provenance": _autocomplete_provenance(resolved, final_queries),
+        provenance_key: provenance,
         "evidence": {
             "task_record_id": record_id,
             "platform": task.platform.value,
@@ -990,8 +1037,12 @@ def _validated_payload(
         evidence = stages["evidence_validated"]
         if not isinstance(evidence, dict):
             raise ValueError
+        resolved, final_queries = _queries_resolved_payload(
+            checkpoint, checkpoint["record_id"], run_dir,
+        )
+        provenance_key, _expected_provenance = _resolution_provenance(resolved, final_queries)
         allowed = {
-            "autocomplete_provenance", "evidence", "candidates",
+            provenance_key, "evidence", "candidates",
             "observation_count", "recurring_count", "detail_count",
             "evidence_digest", "validated_at", "write_progress",
         }
@@ -1003,18 +1054,15 @@ def _validated_payload(
             count_value = evidence[count_key]
             if type(count_value) is not int or count_value < 0:
                 raise ValueError
-        _validated_autocomplete_provenance(
+        _validated_resolution_provenance(
             evidence, checkpoint, checkpoint["record_id"], run_dir,
-        )
-        resolved, final_queries = _queries_resolved_payload(
-            checkpoint, checkpoint["record_id"], run_dir,
         )
         canonical = _canonical_evidence_payload(
             evidence["evidence"], prepared, resolved, final_queries,
             checkpoint["record_id"],
         )
         canonical_keys = {
-            "autocomplete_provenance", "evidence", "candidates",
+            provenance_key, "evidence", "candidates",
             "observation_count", "recurring_count", "detail_count",
             "evidence_digest",
         }
@@ -1047,8 +1095,12 @@ def _migrate_legacy_evidence_digest_locked(
     if not isinstance(evidence, dict) or "evidence_digest" in evidence:
         return checkpoint
     _task, _source, _candidates, validated = _validated_payload(checkpoint, run_dir)
+    resolved, final_queries = _queries_resolved_payload(
+        checkpoint, checkpoint["record_id"], run_dir,
+    )
+    provenance_key, _expected_provenance = _resolution_provenance(resolved, final_queries)
     core_keys = {
-        "autocomplete_provenance", "evidence", "candidates",
+        provenance_key, "evidence", "candidates",
         "observation_count", "recurring_count", "detail_count",
     }
     migrated = dict(validated)
@@ -1247,10 +1299,7 @@ def _finalize_locked(
     if legacy is not None:
         return legacy
     if checkpoint.get("version") != 2 or checkpoint["stage"] == "queries_resolved":
-        raise WorkflowError(
-            "Use the selected Chrome session to collect evidence.json, then run "
-            "validate-evidence --run-dir <RUN_DIR> --input <EVIDENCE_JSON>."
-        )
+        raise WorkflowError(NEXT_STEP)
     if not dry_run:
         checkpoint = _migrate_legacy_evidence_digest_locked(
             store, checkpoint, absolute_run,

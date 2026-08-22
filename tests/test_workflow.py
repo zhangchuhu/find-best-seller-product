@@ -235,18 +235,11 @@ def prepare_only(root: Path, platform: Platform = Platform.SHEIN_US, limit: int 
 
 
 def prepare_run(root: Path, platform: Platform = Platform.SHEIN_US, limit: int = 2):
-    result = prepare_only(root, platform, limit)
-    resolve_run(root, platform)
-    return result
-
-
-def resolve_run(root: Path, platform: Platform = Platform.SHEIN_US):
-    fixture = "shein-autocomplete.json" if platform is Platform.SHEIN_US else "mercado-autocomplete.json"
-    return resolve_queries(root / "rec_source", FIXTURES / fixture)
+    return prepare_only(root, platform, limit)
 
 
 class PrepareTests(unittest.TestCase):
-    def test_prepare_scopes_calls_and_writes_manifest_without_base_mutation(self):
+    def test_prepare_scopes_calls_and_binds_direct_ark_queries_without_base_mutation(self):
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
             summary, lark, ark = prepare_only(root)
@@ -257,11 +250,15 @@ class PrepareTests(unittest.TestCase):
             manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
             self.assertEqual("rec_source", manifest["task"]["record_id"])
             self.assertEqual(3, len(manifest["query_seeds"]))
-            self.assertNotIn("queries", manifest)
+            self.assertEqual(
+                ["mini dress", "puff sleeve mini dress", "cocktail dress"],
+                manifest["queries"],
+            )
             self.assertEqual(str((root / "rec_source" / "source.jpg").resolve()), manifest["source_image"]["path"])
             checkpoint = CheckpointStore(root.resolve()).load("rec_source")
-            self.assertEqual("prepared", checkpoint["stage"])
-            self.assertEqual(manifest, checkpoint["stages"]["prepared"])
+            self.assertEqual("queries_resolved", checkpoint["stage"])
+            self.assertEqual("ark_seeds", checkpoint["stages"]["queries_resolved"]["source"])
+            self.assertEqual(manifest["queries"], checkpoint["stages"]["queries_resolved"]["queries"])
             self.assertEqual(0o600, manifest_path.stat().st_mode & 0o777)
 
     def test_resume_avoids_second_ark_call_and_restart_is_stage_safe(self):
@@ -270,9 +267,9 @@ class PrepareTests(unittest.TestCase):
             _, lark, ark = prepare_only(root)
             prepare("rec_source", root, True, lark_client=lark, ark_client=ark)
             self.assertEqual(1, len(ark.calls))
-            prepare("rec_source", root, True, True, lark_client=lark, ark_client=ark)
-            self.assertEqual(2, len(ark.calls))
-            resolve_run(root)
+            with self.assertRaisesRegex(WorkflowError, "restart-analysis"):
+                prepare("rec_source", root, True, True, lark_client=lark, ark_client=ark)
+            self.assertEqual(1, len(ark.calls))
             validate_evidence(root / "rec_source", evidence_fixture(root, "shein-evidence.json"))
             with self.assertRaisesRegex(WorkflowError, "restart-analysis"):
                 prepare("rec_source", root, True, True, lark_client=lark, ark_client=ark)
@@ -355,7 +352,6 @@ class EvidenceTests(unittest.TestCase):
         context = tempfile.TemporaryDirectory()
         root = Path(context.name)
         prepare_run(root, platform)
-        resolve_run(root, platform)
         summary = validate_evidence(
             root / "rec_source",
             evidence_fixture(root, fixture),
@@ -376,50 +372,23 @@ class EvidenceTests(unittest.TestCase):
                 finally:
                     context.cleanup()
 
-    def test_product_evidence_uses_only_resolved_suggestions_and_persists_provenance(self):
-        """Catch a validator that accepts Ark seeds or unbound suggestion text."""
+    def test_product_evidence_uses_exact_direct_ark_seeds_and_persists_provenance(self):
+        """Catch a validator that accepts a forged direct resolution."""
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
             prepare_only(root)
-            autocomplete = load_fixture("shein-autocomplete.json")
-            autocomplete["seeds"][1]["suggestions"][0]["text"] = "red puff sleeve mini dress"
-            autocomplete["seeds"][2]["suggestions"][0]["text"] = "black cocktail dress"
-            autocomplete_path = root / "autocomplete.json"
-            autocomplete_path.write_text(json.dumps(autocomplete), encoding="utf-8")
-            resolve_queries(root / "rec_source", autocomplete_path)
-
-            stale = load_fixture("shein-evidence.json")
-            stale_path = root / "stale.json"
-            stale_path.write_text(json.dumps(stale), encoding="utf-8")
-            with self.assertRaisesRegex(WorkflowError, "query blocks"):
-                validate_evidence(root / "rec_source", stale_path, clock=frozen_clock())
-
-            replacements = {
-                "puff sleeve mini dress": "puff sleeve party dress",
-                "cocktail dress": "cocktail mini dress",
-            }
-            for block in stale["queries"]:
-                new_query = replacements.get(block["query"], block["query"])
-                block["query"] = new_query
-                for observation in block["observations"]:
-                    observation["query"] = new_query
-            stale["queries"].reverse()
-            exact_path = root / "exact-reordered.json"
-            exact_path.write_text(json.dumps(stale), encoding="utf-8")
+            exact_path = evidence_fixture(root, "shein-evidence.json")
             validate_evidence(root / "rec_source", exact_path, clock=frozen_clock())
 
             checkpoint = CheckpointStore(root).load("rec_source")
             validated = checkpoint["stages"]["evidence_validated"]
             resolved = checkpoint["stages"]["queries_resolved"]
             self.assertEqual(
-                {
-                    "autocomplete_evidence": resolved["autocomplete_evidence"],
-                    "queries": ["mini dress", "puff sleeve party dress", "cocktail mini dress"],
-                },
-                validated["autocomplete_provenance"],
+                {"source": "ark_seeds", "queries": resolved["queries"]},
+                validated["query_provenance"],
             )
             self.assertEqual(
-                ["mini dress", "puff sleeve party dress", "cocktail mini dress"],
+                ["mini dress", "puff sleeve mini dress", "cocktail dress"],
                 [block["query"] for block in validated["evidence"]["queries"]],
             )
 
@@ -461,7 +430,6 @@ class EvidenceTests(unittest.TestCase):
                 "rec_source", root, True,
                 lark_client=FakeLark(), ark_client=FakeArk(source_color_profile),
             )
-            resolve_run(root)
             value = load_fixture("shein-evidence.json")
             value["details"][0]["visual_features"] = ["ultraviolet embroidery"]
             path = root / "source-color-feature.json"
@@ -476,7 +444,6 @@ class EvidenceTests(unittest.TestCase):
                 "rec_source", root, True,
                 lark_client=FakeLark(), ark_client=FakeArk(source_color_profile),
             )
-            resolve_run(root)
             value = load_fixture("shein-evidence.json")
             value["details"][0]["visual_features"] = ["apricot embroidery"]
             path = root / "multiword-source-color-feature.json"
@@ -803,45 +770,70 @@ class EvidenceTests(unittest.TestCase):
 
 
 class QueryResolutionTests(unittest.TestCase):
-    def test_prepare_has_only_seeds_then_resolution_is_bound_and_idempotent(self):
+    def test_prepare_binds_exact_ark_seeds_and_evidence_needs_no_autocomplete_step(self):
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
             prepare_only(root)
             run_dir = root / "rec_source"
             manifest = json.loads((run_dir / "manifest.json").read_text(encoding="utf-8"))
             self.assertEqual(["mini dress", "puff sleeve mini dress", "cocktail dress"], manifest["query_seeds"])
-            self.assertNotIn("queries", manifest)
-            with self.assertRaisesRegex(WorkflowError, "resolve-queries"):
-                validate_evidence(run_dir, evidence_fixture(root, "shein-evidence.json"))
-
-            summary = resolve_queries(run_dir, FIXTURES / "shein-autocomplete.json")
-            self.assertIn("mini dress", summary)
+            self.assertEqual(manifest["query_seeds"], manifest["queries"])
             checkpoint = CheckpointStore(root).load("rec_source")
             self.assertEqual("queries_resolved", checkpoint["stage"])
             resolved = checkpoint["stages"]["queries_resolved"]
             self.assertEqual(["mini dress", "puff sleeve mini dress", "cocktail dress"], resolved["queries"])
-            manifest = json.loads((run_dir / "manifest.json").read_text(encoding="utf-8"))
-            self.assertEqual(resolved["queries"], manifest["queries"])
-            self.assertEqual(summary, resolve_queries(run_dir, FIXTURES / "shein-autocomplete.json"))
+            self.assertEqual("ark_seeds", resolved["source"])
+            validate_evidence(run_dir, evidence_fixture(root, "shein-evidence.json"), clock=frozen_clock())
+            validated = CheckpointStore(root).load("rec_source")["stages"]["evidence_validated"]
+            self.assertEqual(
+                {"source": "ark_seeds", "queries": manifest["query_seeds"]},
+                validated["query_provenance"],
+            )
 
-            changed = load_fixture("shein-autocomplete.json")
-            changed["seeds"][0]["suggestions"][1]["text"] = "black mini dress"
-            changed_path = root / "changed-autocomplete.json"
-            changed_path.write_text(json.dumps(changed), encoding="utf-8")
-            with self.assertRaisesRegex(WorkflowError, "cannot be replaced"):
-                resolve_queries(run_dir, changed_path)
-
-    def test_checkpoint_survives_manifest_crash_and_identical_retry_repairs_it(self):
+    def test_prepare_checkpoint_survives_manifest_crash_and_identical_retry_repairs_it(self):
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
-            prepare_only(root)
             run_dir = root / "rec_source"
             with patch("scripts.workflow._write_json", side_effect=WorkflowError("manifest crash")):
                 with self.assertRaisesRegex(WorkflowError, "manifest crash"):
-                    resolve_queries(run_dir, FIXTURES / "shein-autocomplete.json")
+                    prepare_only(root)
             self.assertEqual("queries_resolved", CheckpointStore(root).load("rec_source")["stage"])
-            resolve_queries(run_dir, FIXTURES / "shein-autocomplete.json")
+            prepare_only(root)
             self.assertIn("queries", json.loads((run_dir / "manifest.json").read_text(encoding="utf-8")))
+
+    def test_direct_resolution_rejects_forged_source_marker_and_reordered_seeds(self):
+        for mutation in (
+            {"source": "autocomplete"},
+            {"queries": ["mini dress", "cocktail dress", "puff sleeve mini dress"]},
+        ):
+            with self.subTest(mutation=mutation), tempfile.TemporaryDirectory() as directory:
+                root = Path(directory)
+                prepare_only(root)
+                checkpoint_path = root / "rec_source" / "checkpoint.json"
+                checkpoint = json.loads(checkpoint_path.read_text(encoding="utf-8"))
+                checkpoint["stages"]["queries_resolved"].update(mutation)
+                checkpoint_path.write_text(json.dumps(checkpoint), encoding="utf-8")
+                with self.assertRaisesRegex(WorkflowError, "resolved queries checkpoint"):
+                    validate_evidence(
+                        root / "rec_source", evidence_fixture(root, "shein-evidence.json"), clock=frozen_clock(),
+                    )
+
+    def test_legacy_autocomplete_resolved_checkpoint_remains_replayable(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            prepare_only(root)
+            checkpoint_path = root / "rec_source" / "checkpoint.json"
+            checkpoint = json.loads(checkpoint_path.read_text(encoding="utf-8"))
+            checkpoint["stage"] = "prepared"
+            checkpoint["stages"].pop("queries_resolved")
+            checkpoint_path.write_text(json.dumps(checkpoint), encoding="utf-8")
+
+            resolve_queries(root / "rec_source", FIXTURES / "shein-autocomplete.json")
+            validate_evidence(
+                root / "rec_source", evidence_fixture(root, "shein-evidence.json"), clock=frozen_clock(),
+            )
+            evidence = CheckpointStore(root).load("rec_source")["stages"]["evidence_validated"]
+            self.assertIn("autocomplete_provenance", evidence)
 
     def test_legacy_finalized_returns_without_parsing_obsolete_profile_or_writing(self):
         with tempfile.TemporaryDirectory() as directory:
@@ -1427,8 +1419,8 @@ class FinalizeTests(unittest.TestCase):
                 [event[1] for event in second.events if event[0] == "write"],
             )
 
-    def test_changed_resolution_cannot_replace_progress_held_under_the_record_lock(self):
-        """Catch a refresh that discards durable Base-write progress for new queries."""
+    def test_changed_direct_resolution_cannot_replace_progress_held_under_the_record_lock(self):
+        """Catch a refresh that discards durable Base-write progress for changed seeds."""
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
             self._validated(root)
@@ -1440,28 +1432,32 @@ class FinalizeTests(unittest.TestCase):
                 CheckpointStore(root).load("rec_source")["stages"]["evidence_validated"]
             )
 
-            changed = load_fixture("shein-autocomplete.json")
-            changed["seeds"][1]["suggestions"][0]["text"] = "red puff sleeve mini dress"
-            changed_path = root / "changed-resolution.json"
-            changed_path.write_text(json.dumps(changed), encoding="utf-8")
-            with self.assertRaisesRegex(WorkflowError, "cannot be replaced"):
-                resolve_queries(root / "rec_source", changed_path)
+            checkpoint_path = root / "rec_source" / "checkpoint.json"
+            changed = json.loads(checkpoint_path.read_text(encoding="utf-8"))
+            changed["stages"]["queries_resolved"]["queries"] = [
+                "mini dress", "cocktail dress", "puff sleeve mini dress",
+            ]
+            checkpoint_path.write_text(json.dumps(changed), encoding="utf-8")
+            with self.assertRaisesRegex(WorkflowError, "resolved queries checkpoint"):
+                validate_evidence(
+                    root / "rec_source", evidence_fixture(root, "shein-evidence.json"), clock=frozen_clock(),
+                )
 
             after = CheckpointStore(root).load("rec_source")["stages"]["evidence_validated"]
             self.assertEqual(before["write_progress"], after["write_progress"])
-            self.assertEqual(before["autocomplete_provenance"], after["autocomplete_provenance"])
+            self.assertEqual(before["query_provenance"], after["query_provenance"])
 
-    def test_finalize_rejects_tampered_autocomplete_provenance_before_base_mutation(self):
-        """Catch a finalized reader that trusts copied queries without their Chrome evidence."""
+    def test_finalize_rejects_tampered_direct_query_provenance_before_base_mutation(self):
+        """Catch a finalized reader that trusts copied queries without Ark binding."""
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
             self._validated(root)
             store = CheckpointStore(root)
             checkpoint = store.load("rec_source")
             evidence = dict(checkpoint["stages"]["evidence_validated"])
-            provenance = dict(evidence["autocomplete_provenance"])
+            provenance = dict(evidence["query_provenance"])
             provenance["queries"] = ["mini dress", "puff sleeve party dress", "cocktail dress"]
-            evidence["autocomplete_provenance"] = provenance
+            evidence["query_provenance"] = provenance
             checkpoint["stages"]["evidence_validated"] = evidence
             (root / "rec_source" / "checkpoint.json").write_text(
                 json.dumps(checkpoint), encoding="utf-8",
@@ -1480,9 +1476,9 @@ class FinalizeTests(unittest.TestCase):
             store = CheckpointStore(root)
             checkpoint = store.load("rec_source")
             evidence = dict(checkpoint["stages"]["evidence_validated"])
-            provenance = dict(evidence["autocomplete_provenance"])
-            provenance["queries"] = ["mini dress", "puff sleeve party dress", "cocktail dress"]
-            evidence["autocomplete_provenance"] = provenance
+            provenance = dict(evidence["query_provenance"])
+            provenance["source"] = "autocomplete"
+            evidence["query_provenance"] = provenance
             checkpoint["stages"]["evidence_validated"] = evidence
             (root / "rec_source" / "checkpoint.json").write_text(
                 json.dumps(checkpoint), encoding="utf-8",
@@ -1495,7 +1491,7 @@ class FinalizeTests(unittest.TestCase):
                 )
             self.assertEqual(
                 provenance,
-                CheckpointStore(root).load("rec_source")["stages"]["evidence_validated"]["autocomplete_provenance"],
+                CheckpointStore(root).load("rec_source")["stages"]["evidence_validated"]["query_provenance"],
             )
 
     def test_legacy_v2_evidence_without_digest_migrates_progress_without_duplicate_base_writes(self):
@@ -1565,17 +1561,7 @@ class FinalizeTests(unittest.TestCase):
             with self.subTest(case=label), tempfile.TemporaryDirectory() as directory:
                 root = Path(directory)
                 prepare_only(root)
-                autocomplete = load_fixture("shein-autocomplete.json")
-                autocomplete["seeds"][1]["suggestions"][0]["text"] = "red puff sleeve mini dress"
-                autocomplete_path = root / "autocomplete.json"
-                autocomplete_path.write_text(json.dumps(autocomplete), encoding="utf-8")
-                resolve_queries(root / "rec_source", autocomplete_path)
                 source = load_fixture("shein-evidence.json")
-                for block in source["queries"]:
-                    if block["query"] == "puff sleeve mini dress":
-                        block["query"] = "puff sleeve party dress"
-                        for observation in block["observations"]:
-                            observation["query"] = "puff sleeve party dress"
                 source_path = root / "source.json"
                 source_path.write_text(json.dumps(source), encoding="utf-8")
                 validate_evidence(root / "rec_source", source_path, clock=frozen_clock())

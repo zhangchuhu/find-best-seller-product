@@ -102,6 +102,32 @@ class CheckpointBehaviorTests(unittest.TestCase):
                 "recEvidence1", "evidence_validated", forged_first_progress,
             )
 
+    def test_direct_seed_evidence_allows_timestamp_refresh_without_replacing_provenance(self) -> None:
+        self.store.save_stage("recDirectEvidence1", "prepared", {"prepared": True})
+        self.store.save_stage("recDirectEvidence1", "queries_resolved", {
+            "source": "ark_seeds", "queries": ["one", "two", "three"],
+        })
+        core = {
+            "query_provenance": {"source": "ark_seeds", "queries": ["one", "two", "three"]},
+            "evidence": {"queries": []},
+            "candidates": [],
+            "observation_count": 90,
+            "recurring_count": 2,
+            "detail_count": 2,
+            "evidence_digest": "a" * 64,
+        }
+        self.store.save_stage(
+            "recDirectEvidence1", "evidence_validated",
+            {**core, "validated_at": "2026-08-21T10:00:00Z"},
+        )
+        self.store.save_stage(
+            "recDirectEvidence1", "evidence_validated",
+            {
+                **core,
+                "validated_at": "2026-08-21T10:01:00Z",
+            },
+        )
+
     def test_legacy_v1_is_read_only_only_after_the_exact_legacy_finalized_prefix(self) -> None:
         record_id = "recLegacy1"
         legacy = {

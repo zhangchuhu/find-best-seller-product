@@ -19,11 +19,12 @@ _LEGACY_V1_STAGES = ("prepared", "evidence_validated", "finalized")
 
 _RECORD_ID = re.compile(r"rec[A-Za-z0-9_-]+", re.ASCII)
 _ENVELOPE_KEYS = frozenset({"record_id", "stage", "stages", "version"})
-_EVIDENCE_CORE_KEYS = frozenset({
-    "autocomplete_provenance", "evidence", "candidates",
+_EVIDENCE_SHARED_CORE_KEYS = frozenset({
+    "evidence", "candidates",
     "observation_count", "recurring_count", "detail_count", "evidence_digest",
 })
-_EVIDENCE_ALLOWED_KEYS = _EVIDENCE_CORE_KEYS | frozenset({"validated_at", "write_progress"})
+_AUTOCOMPLETE_EVIDENCE_CORE_KEYS = _EVIDENCE_SHARED_CORE_KEYS | frozenset({"autocomplete_provenance"})
+_DIRECT_EVIDENCE_CORE_KEYS = _EVIDENCE_SHARED_CORE_KEYS | frozenset({"query_provenance"})
 _FORBIDDEN_KEYS = (
     "api_key",
     "apikey",
@@ -218,6 +219,16 @@ def _evidence_timestamp(value: object) -> datetime | None:
     return parsed.astimezone(timezone.utc)
 
 
+def _evidence_core_keys(value: Mapping[str, object]) -> frozenset[str] | None:
+    """Recognize one immutable evidence provenance layout at a time."""
+    keys = set(value)
+    if "autocomplete_provenance" in keys and "query_provenance" not in keys:
+        return _AUTOCOMPLETE_EVIDENCE_CORE_KEYS
+    if "query_provenance" in keys and "autocomplete_provenance" not in keys:
+        return _DIRECT_EVIDENCE_CORE_KEYS
+    return None
+
+
 def _progress_value(value: object) -> tuple[tuple[str, ...], tuple[str, ...], bool] | None:
     if not isinstance(value, dict) or set(value) not in (
         {"intended", "completed"},
@@ -280,12 +291,16 @@ def _evidence_replacement_allowed(
     """Allow only metadata/progress monotonicity after evidence is durable."""
     if not isinstance(current, dict) or not isinstance(replacement, dict):
         return False
-    legacy_core = _EVIDENCE_CORE_KEYS - {"evidence_digest"}
+    core = _evidence_core_keys(current)
+    if core is None or core != _evidence_core_keys(replacement):
+        return False
+    legacy_core = core - {"evidence_digest"}
+    allowed = core | frozenset({"validated_at", "write_progress"})
     if (
         not ((legacy_core | {"validated_at"}) <= set(current))
         or not ((legacy_core | {"validated_at"}) <= set(replacement))
-        or not set(current) <= _EVIDENCE_ALLOWED_KEYS
-        or not set(replacement) <= _EVIDENCE_ALLOWED_KEYS
+        or not set(current) <= allowed
+        or not set(replacement) <= allowed
     ):
         return False
     if any(current[key] != replacement[key] for key in legacy_core):
