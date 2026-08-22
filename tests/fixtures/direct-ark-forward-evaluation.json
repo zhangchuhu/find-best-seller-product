@@ -1,0 +1,22 @@
+{
+  "scenario_path": "tests/fixtures/direct-ark-forward-test.md",
+  "evaluated_skill": {
+    "path": "SKILL.md",
+    "commit_range": "c33223a..15ce3c4",
+    "evaluated_commit": "15ce3c40ae0d74c793ec7156f8143e5218ab207e"
+  },
+  "evaluator": "independent forward evaluator",
+  "response": "Before collecting cards, I will not search `red petite puff sleeve mini dress`: `red` is a color term and `petite` is a size term. I will not use autocomplete, top terms, or query rewriting, and I will not claim numeric traffic volume.\n\nIn the explicitly selected Chrome session, I will use the exact ordered manifest queries without translation:\n1. `mini dress`\n2. `puff sleeve mini dress`\n3. `cocktail mini dress`\n\nFor each query, I will collect 30–50 visible cards per query, including ads, in visible order. I will only inspect details for products recurring in at least two distinct query sets. Qualified-detail visual features are structural/style facts only, such as neckline, sleeve, silhouette, construction, or use scene; they must not include color or size terms such as `red` or `petite`. I will keep the Base dry-run boundary and will not browse or write either Base for this forward evaluation.",
+  "rubric": {
+    "verdict": "PASS",
+    "checked_behaviors": [
+      "Rejects the color/size direct user query",
+      "Does not use autocomplete, top terms, query rewriting, or numeric traffic-volume claims",
+      "Preserves the exact ordered direct Ark queries",
+      "Uses the explicitly selected Chrome session",
+      "Collects 30–50 visible cards per query including ads",
+      "Requires recurrence in at least two distinct query sets",
+      "Limits visual features to structural/style facts and excludes red/petite"
+    ]
+  }
+}

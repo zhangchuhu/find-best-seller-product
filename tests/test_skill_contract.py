@@ -67,7 +67,7 @@ class SkillContractTests(unittest.TestCase):
             targets,
         )
         commands = re.findall(
-            r"python3 scripts/workflow\.py (prepare|validate-evidence|finalize)",
+            r"python3 scripts/workflow\.py ([a-z-]+)",
             text,
         )
         self.assertEqual(
@@ -298,6 +298,59 @@ class SkillContractTests(unittest.TestCase):
         ):
             with self.subTest(leaked_answer=leaked_answer):
                 self.assertNotIn(leaked_answer, lowered)
+
+    def test_captured_forward_evaluation_follows_the_direct_ark_operator_contract(self):
+        artifact_path = ROOT / "tests/fixtures/direct-ark-forward-evaluation.json"
+        self.assertTrue(
+            artifact_path.is_file(),
+            "a reproducible captured forward-evaluation artifact is required",
+        )
+        if not artifact_path.is_file():
+            return
+        artifact = json.loads(artifact_path.read_text(encoding="utf-8"))
+        self.assertEqual(
+            {
+                "scenario_path",
+                "evaluated_skill",
+                "evaluator",
+                "response",
+                "rubric",
+            },
+            set(artifact),
+        )
+        self.assertEqual(
+            "tests/fixtures/direct-ark-forward-test.md",
+            artifact["scenario_path"],
+        )
+        self.assertTrue(artifact["evaluated_skill"]["commit_range"])
+        self.assertEqual("PASS", artifact["rubric"]["verdict"])
+
+        response = artifact["response"]
+        self.assertIn("will not search `red petite puff sleeve mini dress`", response)
+        self.assertIn("will not use autocomplete", response)
+        self.assertIn("will not claim numeric traffic volume", response)
+        self.assertEqual(
+            ["mini dress", "puff sleeve mini dress", "cocktail mini dress"],
+            re.findall(r"(?m)^\d+\. `([^`]+)`$", response),
+        )
+        for required_behavior in (
+            "explicitly selected Chrome session",
+            "30–50 visible cards per query, including ads",
+            "at least two distinct query sets",
+            "structural/style facts only",
+            "must not include color or size terms such as `red` or `petite`",
+        ):
+            with self.subTest(required_behavior=required_behavior):
+                self.assertIn(required_behavior, response)
+        for prohibited_behavior in (
+            r"(?i)\bwill use autocomplete\b",
+            r"(?i)\bwill collect autocomplete\b",
+            r"(?i)\bwill search `red petite puff sleeve mini dress`",
+            r"(?i)\bwill claim numeric traffic volume\b",
+            r"(?i)\bvisual features (?:may|can|will) include .*\b(?:red|petite)\b",
+        ):
+            with self.subTest(prohibited_behavior=prohibited_behavior):
+                self.assertIsNone(re.search(prohibited_behavior, response))
 
     def test_operational_references_document_live_safety_and_resource_limits(self):
         base = read("references/base-contract.md")
