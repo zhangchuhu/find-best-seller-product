@@ -28,7 +28,7 @@
     }
   }
 
-  function createSession({taskRecordId, platform, queries, limit}) {
+  function createSession({taskRecordId, platform, queries, cardLimit, resultLimit}) {
     if (typeof taskRecordId !== "string" || !RECORD_ID.test(taskRecordId)) {
       throw new Error("invalid task record ID");
     }
@@ -36,12 +36,14 @@
     if (!Array.isArray(queries) || queries.length !== 3 || queries.some((query) => typeof query !== "string" || !query.trim()) || new Set(queries).size !== 3) {
       throw new Error("exactly three distinct Ark queries are required");
     }
-    if (!Number.isInteger(limit) || limit < 30 || limit > 50) throw new Error("card limit must be 30-50");
+    if (!Number.isInteger(cardLimit) || cardLimit < 30 || cardLimit > 50) throw new Error("card limit must be 30-50");
+    if (!Number.isInteger(resultLimit) || resultLimit < 1) throw new Error("task result limit must be a positive integer");
     return {
       taskRecordId,
       platform,
       queries: [...queries],
-      limit,
+      cardLimit,
+      resultLimit,
       screenshots: [],
       queryBlocks: queries.map((query) => ({query, observations: []})),
       details: [],
@@ -97,7 +99,7 @@
     if (blockIndex < 0 || queryFromUrl(screenshot?.page_url) !== query) throw new Error("search screenshot query URL does not match exact Ark query");
     const descriptor = validateScreenshot(session, screenshot, "search", query, null);
     const block = session.queryBlocks[blockIndex];
-    if (!Array.isArray(cards) || block.observations.length + cards.length > session.limit) throw new Error("search frame exceeds card limit");
+    if (!Array.isArray(cards) || block.observations.length + cards.length > session.cardLimit) throw new Error("search frame exceeds card limit");
     const seen = new Set(block.observations.map((card) => card.product_id));
     const additions = [];
     for (let index = 0; index < cards.length; index += 1) {
@@ -125,23 +127,55 @@
     return block.observations.length;
   }
 
-  function recurringIdentities(session) {
+  function recurringPool(session) {
     const hits = new Map();
     for (const block of session.queryBlocks) {
       for (const card of block.observations) {
         const identity = `shein-us:${card.product_id}`;
-        if (!hits.has(identity)) hits.set(identity, new Set());
-        hits.get(identity).add(block.query);
+        if (!hits.has(identity)) hits.set(identity, {queries: new Set(), organic: [], sponsored: []});
+        const value = hits.get(identity);
+        value.queries.add(block.query);
+        (card.is_ad ? value.sponsored : value.organic).push(card.rank);
       }
     }
-    return new Set([...hits].filter(([, queries]) => queries.size >= 2).map(([identity]) => identity));
+    return [...hits]
+      .filter(([, value]) => value.queries.size >= 2)
+      .sort(([leftIdentity, left], [rightIdentity, right]) => {
+        const leftOrganic = left.organic.length ? Math.min(...left.organic) : null;
+        const rightOrganic = right.organic.length ? Math.min(...right.organic) : null;
+        const leftRank = leftOrganic ?? Math.min(...left.sponsored);
+        const rightRank = rightOrganic ?? Math.min(...right.sponsored);
+        return right.queries.size - left.queries.size
+          || Number(leftOrganic === null) - Number(rightOrganic === null)
+          || leftRank - rightRank
+          || (leftIdentity < rightIdentity ? -1 : leftIdentity > rightIdentity ? 1 : 0);
+      })
+      .map(([identity]) => identity);
+  }
+
+  function searchesComplete(session) {
+    return session.queryBlocks.every((block) => block.observations.length === session.cardLimit);
+  }
+
+  function qualifyingCount(session) {
+    return session.details.filter((detail) => detail.status === "qualified").length;
+  }
+
+  function nextExpectedIdentity(session) {
+    if (!searchesComplete(session)) throw new Error("complete all three search queries before detail capture");
+    const pool = recurringPool(session);
+    if (pool.length < 2) throw new Error("at least two recurring identities are required");
+    if (qualifyingCount(session) >= session.resultLimit) throw new Error("task result limit has already been reached");
+    if (session.details.length >= pool.length) throw new Error("recurring pool is exhausted");
+    return pool[session.details.length];
   }
 
   function addDetailCapture(session, {screenshot, detail, regions}) {
     if (!detail || typeof detail !== "object" || DETAIL_KEYS.some((key) => !(key in detail)) || Object.keys(detail).length !== DETAIL_KEYS.length) {
       throw new Error("detail has an invalid schema");
     }
-    if (!recurringIdentities(session).has(detail.identity)) throw new Error("detail identity is not recurring");
+    const expectedIdentity = nextExpectedIdentity(session);
+    if (detail.identity !== expectedIdentity) throw new Error(`detail must follow recurring-pool order; expected ${expectedIdentity}`);
     const productId = detail.identity.startsWith("shein-us:") ? detail.identity.slice(9) : null;
     const required = detail.status === "qualified" && detail.reason === null ? PURPOSES.qualified : PURPOSES[detail.reason];
     if (!required || (detail.status !== "qualified" && detail.status !== "rejected")) throw new Error("detail status or reason is invalid");
@@ -149,7 +183,7 @@
     const screenshotUrlId = canonicalProductId(screenshot?.page_url);
     if (!productId) throw new Error("detail screenshot identity binding failed");
     if (detail.reason === "identity_changed") {
-      if (!detailUrlId || detailUrlId === productId || detail.product_id !== detailUrlId || screenshotUrlId !== detailUrlId || typeof detail.title !== "string" || !detail.title) {
+      if (!detailUrlId || detailUrlId === productId || detail.product_id !== detailUrlId || screenshotUrlId !== detailUrlId) {
         throw new Error("detail screenshot identity binding failed");
       }
     } else if (detail.reason === "detail_inaccessible") {
@@ -188,8 +222,20 @@
 
   function buildEvidence(session) {
     for (const block of session.queryBlocks) {
-      if (block.observations.length < 30 || block.observations.length > 50) throw new Error("each query must contain 30-50 observations");
+      if (block.observations.length < 30 || block.observations.length > 50 || block.observations.length !== session.cardLimit) throw new Error("each query must contain the chosen 30-50 observations");
       if (block.observations.some((card, index) => card.rank !== index + 1)) throw new Error("query ranks must be contiguous");
+    }
+    const pool = recurringPool(session);
+    if (pool.length < 2) throw new Error("at least two recurring identities are required");
+    const identities = session.details.map((detail) => detail.identity);
+    if (identities.some((identity, index) => identity !== pool[index])) throw new Error("detail outcomes must be an exact recurring-pool prefix in order");
+    const qualified = qualifyingCount(session);
+    if (qualified > session.resultLimit) throw new Error("detail outcomes continue after the result limit");
+    if (qualified === session.resultLimit) {
+      const reachedAt = session.details.findIndex((_detail, index) => qualifyingCount({details: session.details.slice(0, index + 1)}) === session.resultLimit);
+      if (reachedAt !== session.details.length - 1) throw new Error("detail outcomes continue after the result limit");
+    } else if (session.details.length !== pool.length) {
+      throw new Error("detail outcomes stopped before the recurring pool was exhausted");
     }
     return {
       task_record_id: session.taskRecordId,
@@ -210,9 +256,48 @@
     return response;
   }
 
+  function detailCapturePlan(expectedIdentity, visible, operator) {
+    const base = {
+      identity: expectedIdentity,
+      status: "rejected",
+      reason: null,
+      detail_url: null,
+      product_id: null,
+      title: null,
+      category: null,
+      sold_display: null,
+      reviews_display: null,
+      rating_display: null,
+      match_level: null,
+      visual_features: null,
+    };
+    if (visible.blocked) {
+      return {detail: {...base, reason: "detail_inaccessible"}, regions: [{purpose: "access_state", bbox: visible.access_bbox}]};
+    }
+    if (!visible.identity_matches) {
+      return {
+        detail: {...base, reason: "identity_changed", detail_url: visible.page_url, product_id: visible.product_id, title: visible.title,
+          category: visible.category, sold_display: visible.sold_display, reviews_display: visible.reviews_display, rating_display: visible.rating_display},
+        regions: [{purpose: "access_state", bbox: visible.access_bbox}],
+      };
+    }
+    const status = operator.status;
+    const reason = status === "qualified" ? null : operator.reason;
+    const regions = [];
+    if (visible.visual_bbox) regions.push({purpose: "visual", bbox: visible.visual_bbox});
+    if (visible.metrics_bbox) regions.push({purpose: "metrics", bbox: visible.metrics_bbox});
+    return {
+      detail: {...base, status, reason, detail_url: visible.page_url, product_id: visible.product_id, title: visible.title,
+        category: visible.category, sold_display: visible.sold_display, reviews_display: visible.reviews_display,
+        rating_display: visible.rating_display, match_level: status === "qualified" ? operator.matchLevel : null,
+        visual_features: status === "qualified" ? operator.visualFeatures : null},
+      regions,
+    };
+  }
+
   const testExports = globalThis.__SHEIN_COLLECTOR_TEST__;
   if (testExports) {
-    Object.assign(testExports, {createSession, addSearchFrame, addDetailCapture, buildEvidence, serializeEvidence, requireSafeResponse});
+    Object.assign(testExports, {createSession, addSearchFrame, addDetailCapture, buildEvidence, serializeEvidence, requireSafeResponse, detailCapturePlan, nextExpectedIdentity});
   }
 
   if (typeof document === "undefined" || typeof chrome === "undefined") return;
@@ -247,7 +332,8 @@
         taskRecordId: element("record-id").value,
         platform: element("platform").value,
         queries: [...document.querySelectorAll(".query")].map((input) => input.value),
-        limit: Number(element("limit").value),
+        cardLimit: Number(element("card-limit").value),
+        resultLimit: Number(element("result-limit").value),
       });
       element("setup").hidden = true;
       element("controls").hidden = false;
@@ -259,12 +345,12 @@
     try {
       clearError();
       if (!session || session.stopped) throw new Error("start a new collector session");
-      const block = session.queryBlocks.find((candidate) => candidate.observations.length < session.limit);
+      const block = session.queryBlocks.find((candidate) => candidate.observations.length < session.cardLimit);
       if (!block) throw new Error("all three search queries are complete");
       let frame = session.screenshots.filter((item) => item.kind === "search" && item.query === block.query).length + 1;
-      while (block.observations.length < session.limit) {
+      while (block.observations.length < session.cardLimit) {
         const prior = block.observations.map((card) => ({...card, bbox: card.evidence_ref.bbox}));
-        const result = await sendToPage({type: "SHEIN_COLLECTOR_EXTRACT_SEARCH", query: block.query, prior, limit: session.limit});
+        const result = await sendToPage({type: "SHEIN_COLLECTOR_EXTRACT_SEARCH", query: block.query, prior, limit: session.cardLimit});
         const newCards = result.observations.slice(block.observations.length);
         if (newCards.length) {
           const captured = await capture();
@@ -273,9 +359,9 @@
           addSearchFrame(session, {query: block.query, screenshot: {id, file: `screenshots/${id}.png`, sha256: captured.sha256, page_url: captured.page_url}, cards: newCards});
           session.downloadData.set(`screenshots/${id}.png`, captured.data_url);
           frame += 1;
-          setStatus(`${block.query}: ${block.observations.length}/${session.limit} first-visible cards.`);
+          setStatus(`${block.query}: ${block.observations.length}/${session.cardLimit} first-visible cards.`);
         }
-        if (block.observations.length >= session.limit) break;
+        if (block.observations.length >= session.cardLimit) break;
         const scroll = await sendToPage({type: "SHEIN_COLLECTOR_SCROLL"});
         if (scroll.at_end && !newCards.length) throw new Error("page ended before 30 visible unique cards were collected");
         await delay(350);
@@ -288,32 +374,29 @@
     try {
       clearError();
       if (!session || session.stopped) throw new Error("start a new collector session");
-      const status = await sendToPage({type: "SHEIN_COLLECTOR_STATUS"});
-      const productId = canonicalProductId(status.page_url);
-      const identity = productId ? `shein-us:${productId}` : null;
-      if (!identity || !recurringIdentities(session).has(identity)) throw new Error("current detail identity is not recurring across queries");
+      const identity = nextExpectedIdentity(session);
+      const productId = identity.slice(9);
       const visible = await sendToPage({type: "SHEIN_COLLECTOR_EXTRACT_DETAIL", identity});
       const captured = await capture();
       if (captured.page_url !== visible.page_url) throw new Error("page changed during screenshot capture");
-      const regions = [];
-      if (visible.visual_bbox) regions.push({purpose: "visual", bbox: visible.visual_bbox});
-      if (visible.metrics_bbox) regions.push({purpose: "metrics", bbox: visible.metrics_bbox});
       const selectedStatus = element("detail-status").value;
       const reason = selectedStatus === "qualified" ? null : element("detail-reason").value || null;
+      const plan = detailCapturePlan(identity, visible, {
+        status: selectedStatus,
+        reason,
+        matchLevel: element("match-level").value || null,
+        visualFeatures: element("visual-features").value.split("\n").filter(Boolean),
+      });
       const id = `detail-${productId}-${String(session.details.length + 1).padStart(3, "0")}`;
       addDetailCapture(session, {
         screenshot: {id, file: `screenshots/${id}.png`, sha256: captured.sha256, page_url: captured.page_url},
-        detail: {
-          identity, status: selectedStatus, reason, detail_url: visible.page_url, product_id: productId,
-          title: visible.title, category: visible.category, sold_display: visible.sold_display,
-          reviews_display: visible.reviews_display, rating_display: visible.rating_display,
-          match_level: selectedStatus === "qualified" ? element("match-level").value || null : null,
-          visual_features: selectedStatus === "qualified" ? element("visual-features").value.split("\n").filter(Boolean) : null,
-        },
-        regions,
+        detail: plan.detail,
+        regions: plan.regions,
       });
       session.downloadData.set(`screenshots/${id}.png`, captured.data_url);
-      setStatus(`Captured detail ${identity}.`);
+      if (visible.blocked) element("error").textContent = visible.blocking_error;
+      const completed = qualifyingCount(session) >= session.resultLimit || session.details.length === recurringPool(session).length;
+      setStatus(completed ? `Captured detail ${identity}. Evidence is complete and ready to download.` : `Captured detail ${identity}. Next required identity: ${nextExpectedIdentity(session)}.`);
     } catch (error) { stopWithError(error); }
   });
 

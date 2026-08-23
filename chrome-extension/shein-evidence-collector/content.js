@@ -192,28 +192,72 @@
     return null;
   }
 
+  function unionBoxes(boxes) {
+    if (!boxes.length) return null;
+    const left = Math.min(...boxes.map((box) => box[0]));
+    const top = Math.min(...boxes.map((box) => box[1]));
+    const right = Math.max(...boxes.map((box) => box[0] + box[2]));
+    const bottom = Math.max(...boxes.map((box) => box[1] + box[3]));
+    return [left, top, right - left, bottom - top];
+  }
+
+  function extractVisibleMetrics(entries) {
+    let reviews = null;
+    let rating = null;
+    let sold = null;
+    const evidenceBoxes = [];
+    for (const entry of entries) {
+      const text = String(entry?.text || "").trim();
+      if (!text || !Array.isArray(entry.bbox)) continue;
+      let matched = false;
+      if (entry.kind === "reviews") {
+        const match = /([\d,.]+)\s*(?:reviews?|ratings?)/i.exec(text);
+        if (match) { reviews ??= match[1]; matched = true; }
+      } else if (entry.kind === "rating") {
+        const match = /(?:^|\brating\s*:?\s*)([0-5](?:\.\d+)?)\s*(?:out\s+of|\/)\s*5\b/i.exec(text)
+          || /^\s*rating\s*:?\s*([0-5](?:\.\d+)?)\s*$/i.exec(text)
+          || /^\s*([0-5](?:\.\d+)?)\s*$/.exec(text);
+        if (match) { rating ??= match[1]; matched = true; }
+      } else if (entry.kind === "sold") {
+        const match = /([\d,.]+\+?\s*sold)/i.exec(text);
+        if (match) { sold ??= match[1]; matched = true; }
+      }
+      if (matched) evidenceBoxes.push(entry.bbox);
+    }
+    return {sold_display: sold, reviews_display: reviews, rating_display: rating, metrics_bbox: unionBoxes(evidenceBoxes)};
+  }
+
   function extractDetail(expectedIdentity) {
     const blockingError = detectBlockingWall();
-    if (blockingError) return {error: blockingError, access_bbox: [0, 0, Math.max(1, innerWidth), Math.max(1, innerHeight)]};
+    const viewport = {width: innerWidth, height: innerHeight, scale: devicePixelRatio || 1};
+    if (blockingError) return {
+      blocked: true,
+      blocking_error: blockingError,
+      page_url: location.href,
+      access_bbox: normalizeBox({left: 0, top: 0, right: innerWidth, bottom: innerHeight}, viewport),
+    };
     const productId = canonicalProductId(location.href);
     const actualIdentity = productId ? `shein-us:${productId}` : null;
-    const viewport = {width: innerWidth, height: innerHeight, scale: devicePixelRatio || 1};
     const titleElement = firstVisible(["h1", '[class*="product-title" i]', '[class*="goods-title" i]']);
     const imageElement = firstVisible(['[class*="product" i] img', "main img"]);
-    const metricElements = [...document.querySelectorAll("button, a, span, div")].filter((element) => {
-      const text = visibleText(element);
-      return text.length <= 120 && /(?:\d[\d,.]*\s*(?:reviews?|ratings?)|(?:rating\s*)?[0-5](?:\.\d+)\s*(?:\/\s*5)?)/i.test(text);
-    });
-    const pageText = metricElements.map(visibleText).join(" | ");
-    const reviews = pageText.match(/([\d,.]+)\s*(?:reviews?|ratings?)/i)?.[1] || null;
-    const rating = pageText.match(/(?:rating\s*)?([0-5](?:\.\d+)?)\s*(?:\/\s*5)?/i)?.[1] || null;
-    const sold = pageText.match(/([\d,.]+\+?\s*sold)/i)?.[1] || null;
+    const metricEntries = [];
+    const metricSelectors = {
+      reviews: '[class*="review" i], [aria-label*="review" i], [title*="review" i]',
+      rating: '[class*="rating" i], [aria-label*="rating" i], [title*="rating" i], [data-rating], [itemprop="ratingValue"]',
+      sold: '[class*="sold" i], [aria-label*="sold" i]',
+    };
+    for (const [kind, selector] of Object.entries(metricSelectors)) {
+      for (const element of document.querySelectorAll(selector)) {
+        const text = visibleText(element);
+        const bbox = isVisible(element) ? normalizeBox(element.getBoundingClientRect(), viewport) : null;
+        if (text && text.length <= 120 && bbox) metricEntries.push({kind, text, bbox});
+      }
+    }
+    const metrics = extractVisibleMetrics(metricEntries);
     const visualBox = imageElement ? normalizeBox(imageElement.getBoundingClientRect(), viewport) : null;
-    const metricsRect = metricElements.reduce((box, element) => {
-      const rect = element.getBoundingClientRect();
-      if (!box) return {left: rect.left, top: rect.top, right: rect.right, bottom: rect.bottom};
-      return {left: Math.min(box.left, rect.left), top: Math.min(box.top, rect.top), right: Math.max(box.right, rect.right), bottom: Math.max(box.bottom, rect.bottom)};
-    }, null);
+    const accessBox = titleElement
+      ? normalizeBox(titleElement.getBoundingClientRect(), viewport)
+      : normalizeBox({left: 0, top: 0, right: innerWidth, bottom: innerHeight}, viewport);
     return {
       page_url: location.href,
       identity: actualIdentity,
@@ -221,11 +265,12 @@
       product_id: productId,
       title: titleElement ? visibleText(titleElement) : null,
       category: visibleText(firstVisible(['nav[aria-label*="breadcrumb" i]', '[class*="breadcrumb" i]'])) || null,
-      sold_display: sold,
-      reviews_display: reviews,
-      rating_display: rating,
+      sold_display: metrics.sold_display,
+      reviews_display: metrics.reviews_display,
+      rating_display: metrics.rating_display,
       visual_bbox: visualBox,
-      metrics_bbox: metricsRect ? normalizeBox(metricsRect, viewport) : null,
+      metrics_bbox: metrics.metrics_bbox,
+      access_bbox: accessBox,
     };
   }
 
@@ -245,6 +290,7 @@
       normalizeBox,
       classifyVisibleAd,
       mergeFirstVisible,
+      extractVisibleMetrics,
     });
   }
 

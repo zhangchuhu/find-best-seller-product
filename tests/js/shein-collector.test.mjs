@@ -24,7 +24,7 @@ function loadClassicScript(path, additions = {}) {
 
 test("content script exposes the required pure helpers through the VM hook", () => {
   const api = loadClassicScript(CONTENT);
-  for (const name of ["canonicalProductId", "normalizeBox", "classifyVisibleAd", "mergeFirstVisible"]) {
+  for (const name of ["canonicalProductId", "normalizeBox", "classifyVisibleAd", "mergeFirstVisible", "extractVisibleMetrics"]) {
     assert.equal(typeof api[name], "function", `${name} must be exported to the test hook`);
   }
 });
@@ -95,13 +95,33 @@ test("mergeFirstVisible rejects URL/explicit ID disagreement and unknown ad stat
   assert.throws(() => mergeFirstVisible([{...base, product_id: "10001", is_ad: null}], []), /ambiguous ad state/);
 });
 
+test("visible metrics require explicit rating context and bind only exact metric elements", () => {
+  const {extractVisibleMetrics} = loadClassicScript(CONTENT);
+  const falsePositive = extractVisibleMetrics([
+    {kind: "reviews", text: "245 reviews", bbox: [10, 10, 100, 20]},
+    {kind: "other", text: "$2.99", bbox: [10, 40, 100, 20]},
+  ]);
+  assert.equal(falsePositive.reviews_display, "245");
+  assert.equal(falsePositive.rating_display, null);
+  assert.deepEqual(Array.from(falsePositive.metrics_bbox), [10, 10, 100, 20]);
+
+  const explicit = extractVisibleMetrics([
+    {kind: "reviews", text: "245 Reviews", bbox: [10, 10, 100, 20]},
+    {kind: "rating", text: "4.8 out of 5", bbox: [130, 10, 90, 20]},
+    {kind: "other", text: "$4.70", bbox: [10, 40, 100, 20]},
+  ]);
+  assert.equal(explicit.rating_display, "4.8");
+  assert.deepEqual(Array.from(explicit.metrics_bbox), [10, 10, 210, 20]);
+  assert.equal(extractVisibleMetrics([{kind: "rating", text: "Rating: 4.7", bbox: [0, 0, 10, 10]}]).rating_display, "4.7");
+});
+
 function screenshot(id, pageUrl, digest = "a".repeat(64)) {
   return {id, file: `screenshots/${id}.png`, sha256: digest, page_url: pageUrl};
 }
 
-function searchCards(query, offset = 0) {
+function searchCards(query, offset = 0, recurringCount = 2) {
   return Array.from({length: 30}, (_, index) => {
-    const productId = index === 0 ? "10001" : String(offset + index + 20000);
+    const productId = index < recurringCount ? String(10001 + index) : String(offset + index + 20000);
     return {
       query,
       rank: index + 1,
@@ -115,15 +135,15 @@ function searchCards(query, offset = 0) {
   });
 }
 
-function populatedSession(api) {
+function populatedSession(api, {resultLimit = 1, recurringCount = 2} = {}) {
   const queries = ["mini dress", "puff-sleeve dress", "party dress 中文"];
-  const session = api.createSession({taskRecordId: "recTask_123", platform: "shein-us", queries, limit: 30});
+  const session = api.createSession({taskRecordId: "recTask_123", platform: "shein-us", queries, cardLimit: 30, resultLimit});
   queries.forEach((query, index) => {
     const pageUrl = `https://us.shein.com/pdsearch/${encodeURIComponent(query)}/`;
     api.addSearchFrame(session, {
       query,
       screenshot: screenshot(`query-${index + 1}-frame-001`, pageUrl, String(index + 1).repeat(64)),
-      cards: searchCards(query, index * 100),
+      cards: searchCards(query, index * 100, recurringCount),
     });
   });
   return {session, queries};
@@ -177,20 +197,61 @@ test("collector package has exact root/schema keys and preserves all three query
 test("collector rejects invalid records, collisions, query substitution, and incomplete ranks", () => {
   const api = loadClassicScript(COLLECTOR);
   for (const bad of ["rec", "../recA", "ABC123", "recA/child", "recé"])
-    assert.throws(() => api.createSession({taskRecordId: bad, platform: "shein-us", queries: ["a", "b", "c"], limit: 30}), /record ID/);
+    assert.throws(() => api.createSession({taskRecordId: bad, platform: "shein-us", queries: ["a", "b", "c"], cardLimit: 30, resultLimit: 1}), /record ID/);
   const {session, queries} = populatedSession(api);
   assert.throws(() => api.addSearchFrame(session, {
     query: queries[0],
     screenshot: screenshot("query-1-frame-001", `https://us.shein.com/pdsearch/${queries[0]}/`),
     cards: [],
   }), /collision/);
-  const fresh = api.createSession({taskRecordId: "recA", platform: "shein-us", queries, limit: 30});
+  const fresh = api.createSession({taskRecordId: "recA", platform: "shein-us", queries, cardLimit: 30, resultLimit: 1});
   assert.throws(() => api.addSearchFrame(fresh, {
     query: queries[0],
     screenshot: screenshot("q1", "https://us.shein.com/pdsearch/wrong/"),
     cards: searchCards(queries[0]),
   }), /query URL/);
-  assert.throws(() => api.buildEvidence(api.createSession({taskRecordId: "recA", platform: "shein-us", queries, limit: 30})), /30-50/);
+  assert.throws(() => api.buildEvidence(api.createSession({taskRecordId: "recA", platform: "shein-us", queries, cardLimit: 30, resultLimit: 1})), /30-50/);
+});
+
+test("evidence enforces two recurring identities, deterministic detail order, and stopping", () => {
+  const api = loadClassicScript(COLLECTOR);
+  const oneRecurring = populatedSession(api, {recurringCount: 1}).session;
+  assert.throws(() => api.buildEvidence(oneRecurring), /two recurring identities/);
+
+  const outOfOrder = populatedSession(api, {resultLimit: 2}).session;
+  const second = {
+    identity: "shein-us:10002", status: "rejected", reason: "threshold_failure",
+    detail_url: "https://us.shein.com/dress-p-10002.html", product_id: "10002", title: "Dress 10002",
+    category: null, sold_display: null, reviews_display: "1", rating_display: "4.7",
+    match_level: null, visual_features: null,
+  };
+  assert.throws(() => api.addDetailCapture(outOfOrder, {
+    screenshot: screenshot("out-of-order", second.detail_url), detail: second,
+    regions: [{purpose: "metrics", bbox: [0, 0, 20, 20]}],
+  }), /recurring-pool order/);
+
+  const stoppedEarly = populatedSession(api, {resultLimit: 2}).session;
+  const firstRejected = {...second, identity: "shein-us:10001", detail_url: "https://us.shein.com/dress-p-10001.html", product_id: "10001", title: "Dress 10001"};
+  api.addDetailCapture(stoppedEarly, {
+    screenshot: screenshot("first-rejected", firstRejected.detail_url), detail: firstRejected,
+    regions: [{purpose: "metrics", bbox: [0, 0, 20, 20]}],
+  });
+  assert.throws(() => api.buildEvidence(stoppedEarly), /exhausted/);
+
+  const reached = populatedSession(api, {resultLimit: 1}).session;
+  const qualified = {
+    ...firstRejected, status: "qualified", reason: null, reviews_display: "245", rating_display: "4.8",
+    match_level: "同款", visual_features: ["puff sleeves"],
+  };
+  api.addDetailCapture(reached, {
+    screenshot: screenshot("qualified-limit", qualified.detail_url), detail: qualified,
+    regions: [{purpose: "visual", bbox: [0, 0, 20, 20]}, {purpose: "metrics", bbox: [20, 0, 20, 20]}],
+  });
+  assert.throws(() => api.addDetailCapture(reached, {
+    screenshot: screenshot("past-limit", second.detail_url), detail: second,
+    regions: [{purpose: "metrics", bbox: [0, 0, 20, 20]}],
+  }), /result limit/);
+  assert.equal(api.buildEvidence(reached).details.length, 1);
 });
 
 test("detail capture requires recurrence, identity binding, and rejection-purpose evidence", () => {
@@ -244,8 +305,42 @@ test("access-state rejections preserve the recurring identity without fabricatin
     detail: inaccessible,
     regions: [{purpose: "access_state", bbox: [0, 0, 100, 20]}],
   });
-  assert.equal(api.buildEvidence(session).details[0].product_id, "99999");
-  assert.equal(api.buildEvidence(inaccessibleSession).details[0].detail_url, null);
+  assert.equal(session.details[0].product_id, "99999");
+  assert.equal(inaccessibleSession.details[0].detail_url, null);
+});
+
+test("UI detail capture planning preserves expected identity on changed and blocked pages", () => {
+  const api = loadClassicScript(COLLECTOR);
+  const session = populatedSession(api, {resultLimit: 2}).session;
+  const changed = api.detailCapturePlan("shein-us:10001", {
+    page_url: "https://us.shein.com/other-p-99999.html", identity: "shein-us:99999", identity_matches: false,
+    product_id: "99999", title: null, category: null, sold_display: null,
+    reviews_display: null, rating_display: null, access_bbox: [0, 0, 100, 30],
+  }, {});
+  assert.equal(changed.detail.identity, "shein-us:10001");
+  assert.equal(changed.detail.reason, "identity_changed");
+  assert.equal(changed.detail.product_id, "99999");
+  assert.deepEqual(Array.from(changed.regions, (region) => region.purpose), ["access_state"]);
+  api.addDetailCapture(session, {
+    screenshot: screenshot("ui-identity-changed", changed.detail.detail_url),
+    detail: changed.detail,
+    regions: changed.regions,
+  });
+
+  const blocked = api.detailCapturePlan("shein-us:10001", {
+    blocked: true, page_url: "https://us.shein.com/unavailable", access_bbox: [0, 0, 100, 30],
+  }, {});
+  assert.equal(blocked.detail.identity, "shein-us:10001");
+  assert.equal(blocked.detail.reason, "detail_inaccessible");
+  for (const key of ["detail_url", "product_id", "title", "category", "sold_display", "reviews_display", "rating_display", "match_level", "visual_features"])
+    assert.equal(blocked.detail[key], null);
+  assert.deepEqual(Array.from(blocked.regions, (region) => region.purpose), ["access_state"]);
+  api.addDetailCapture(session, {
+    screenshot: screenshot("ui-detail-inaccessible", "https://us.shein.com/unavailable"),
+    detail: {...blocked.detail, identity: "shein-us:10002"},
+    regions: blocked.regions,
+  });
+  assert.equal(api.buildEvidence(session).details.length, 2);
 });
 
 test("qualified and rejected details cannot export validator-invalid match fields", () => {
