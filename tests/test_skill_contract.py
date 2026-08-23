@@ -108,7 +108,7 @@ class SkillContractTests(unittest.TestCase):
             "exactly three queries",
             "30–50 visible cards per query",
             "at least two distinct query sets",
-            "Every observation has exactly `query`, `rank`, `is_ad`, `title`, `url`, `product_id`, and `thumbnail_url`",
+            "Every observation has exactly `query`, `rank`, `is_ad`, `title`, `url`, `product_id`, `thumbnail_url`, and `evidence_ref`",
             "Each detail has exactly `identity`, `status`, `reason`, `detail_url`, `product_id`, `title`",
             "Outcomes must be an exact prefix of that order",
             "`status` is `qualified` or `rejected`",
@@ -186,14 +186,30 @@ class SkillContractTests(unittest.TestCase):
         example = re.search(r"```json\n(.*?)\n```", text, re.DOTALL)
         self.assertIsNotNone(example)
         value = json.loads(example.group(1))
-        self.assertEqual({"task_record_id", "platform", "queries", "details"}, set(value))
+        self.assertEqual(
+            {"task_record_id", "platform", "screenshots", "queries", "details"},
+            set(value),
+        )
+        self.assertGreaterEqual(len(value["screenshots"]), 2)
+        for screenshot in value["screenshots"]:
+            self.assertEqual(
+                {"id", "kind", "file", "sha256", "page_url", "query", "identity"},
+                set(screenshot),
+            )
         self.assertEqual(3, len(value["queries"]))
         for block in value["queries"]:
             self.assertEqual({"query", "observations"}, set(block))
             self.assertEqual(1, len(block["observations"]))
             self.assertEqual(
-                {"query", "rank", "is_ad", "title", "url", "product_id", "thumbnail_url"},
+                {
+                    "query", "rank", "is_ad", "title", "url", "product_id",
+                    "thumbnail_url", "evidence_ref",
+                },
                 set(block["observations"][0]),
+            )
+            self.assertEqual(
+                {"screenshot_id", "bbox"},
+                set(block["observations"][0]["evidence_ref"]),
             )
             self.assertEqual(block["query"], block["observations"][0]["query"])
         self.assertEqual(
@@ -201,9 +217,16 @@ class SkillContractTests(unittest.TestCase):
                 "identity", "status", "reason", "detail_url", "product_id",
                 "title", "category", "sold_display", "reviews_display",
                 "rating_display", "match_level", "visual_features",
+                "evidence_refs",
             },
             set(value["details"][0]),
         )
+        self.assertEqual(
+            {"visual", "metrics"},
+            {item["purpose"] for item in value["details"][0]["evidence_refs"]},
+        )
+        for reference in value["details"][0]["evidence_refs"]:
+            self.assertEqual({"purpose", "screenshot_id", "bbox"}, set(reference))
         self.assertEqual(
             [
                 "mini dress",
@@ -216,6 +239,13 @@ class SkillContractTests(unittest.TestCase):
             ["square neckline", "puff sleeves", "A-line silhouette"],
             value["details"][0]["visual_features"],
         )
+        forbidden_low_value_terms = re.compile(
+            r"\b(?:black|white|red|blue|green|pink|purple|yellow|brown|beige|gray|grey|"
+            r"petite|plus|xs|small|medium|large|xl|xxl)\b",
+            re.IGNORECASE,
+        )
+        self.assertTrue(all(not forbidden_low_value_terms.search(block["query"]) for block in value["queries"]))
+        self.assertTrue(all(not forbidden_low_value_terms.search(item) for item in value["details"][0]["visual_features"]))
         flat = " ".join(text.split())
         for contract in (
             "Use Chrome only; do not navigate with another browser or hidden fallback",
@@ -249,6 +279,24 @@ class SkillContractTests(unittest.TestCase):
             "never compare its text with Ark `category` or `subtype`",
             "Judge category compatibility from visible silhouette, construction, and defining garment parts",
             "`visual_structure_mismatch`",
+            "Structured fields are authoritative",
+            "OCR must not populate, infer, repair, or override structured fields",
+            "Every card and every detail outcome must be bound to screenshot evidence",
+            "Missing, unreadable, deleted, replaced, or SHA-256-mismatched screenshot proof rejects the evidence",
+            "Finalization reopens and revalidates every referenced screenshot before dry-run output or any live write",
+            "128 screenshots",
+            "8 MiB per screenshot",
+            "128 MiB total",
+            "16,384 pixels",
+            "`qualified`: `visual` and `metrics`",
+            "`visual_structure_mismatch`: `visual`",
+            "`imagery_ambiguous_or_inaccessible`: `visual`",
+            "`metric_missing_or_ambiguous`: `metrics`",
+            "`threshold_failure`: `metrics`",
+            "`identity_changed`: `access_state`",
+            "`detail_inaccessible`: `access_state`",
+            "zero Result Base writes and zero `任务状态` writes",
+            "chrome-extension/shein-evidence-collector",
         ):
             with self.subTest(contract=contract):
                 self.assertIn(contract, flat)
@@ -308,6 +356,30 @@ class SkillContractTests(unittest.TestCase):
             with self.subTest(clause=clause):
                 self.assertIn(clause, text)
 
+    def test_screenshot_gate_and_local_collector_are_explicit_across_skill_contract(self):
+        entrypoint = " ".join(read("SKILL.md").split())
+        shein = " ".join(read("references/shein.md").split())
+        metadata = " ".join(read("agents/openai.yaml").split())
+        for clause in (
+            "chrome-extension/shein-evidence-collector",
+            "Every accepted card and detail outcome must have valid screenshot proof",
+            "Screenshot validation failure stops before Result Base or `任务状态` mutation",
+        ):
+            with self.subTest(scope="entrypoint", clause=clause):
+                self.assertIn(clause, entrypoint)
+        for clause in (
+            "navigate directly with each exact Ark manifest query",
+            "https://us.shein.com/*",
+            "SHEIN-only",
+            "must not be used on Mercado Libre",
+            "manually load the unpacked extension",
+        ):
+            with self.subTest(scope="shein", clause=clause):
+                self.assertIn(clause, shein)
+        for clause in ("截图留证", "本地 SHEIN 采集器"):
+            with self.subTest(scope="metadata", clause=clause):
+                self.assertIn(clause, metadata)
+
     def test_autocomplete_module_is_explicitly_legacy_only(self):
         text = read("scripts/autocomplete.py")
         self.assertIn("Legacy version-2 compatibility-only", text)
@@ -315,6 +387,7 @@ class SkillContractTests(unittest.TestCase):
 
     def test_forward_fixture_is_blind_and_keeps_the_required_pressure(self):
         text = read("tests/fixtures/direct-ark-forward-test.md")
+        flat = " ".join(text.split())
         lowered = text.casefold()
         for stimulus in (
             "red petite puff-sleeve mini dress",
@@ -333,9 +406,16 @@ class SkillContractTests(unittest.TestCase):
             "first two visible-DOM reads on the exact search tab timed out",
             "`tab.goto()` also timed out after 30 seconds",
             "separate navigation-commit and product-grid-readiness budgets",
+            "third bounded visible-DOM round also timed out",
+            "bundled unpacked SHEIN collector directory is available locally",
+            "manual Chrome extension setup is permitted",
+            "using OCR to backfill any structured fields",
+            "one screenshot is missing",
+            "SHA-256 no longer matches",
+            "Result Base and task-status writes",
         ):
             with self.subTest(stimulus=stimulus):
-                self.assertIn(stimulus, text)
+                self.assertIn(stimulus, flat)
         self.assertEqual(3, len(re.findall(r"(?m)^\d+\. `[^`]+`", text)))
         for leaked_label in ("correct behavior", "expected", "correct response"):
             with self.subTest(leaked_label=leaked_label):
@@ -390,32 +470,38 @@ class SkillContractTests(unittest.TestCase):
         self.assertEqual("PASS", artifact["rubric"]["verdict"])
 
         response = artifact["response"]
-        self.assertIn("will not search `red petite puff sleeve mini dress`", response)
-        self.assertIn("will not use autocomplete", response)
-        self.assertIn("will not claim numeric traffic volume", response)
+        self.assertIn("will not search the color/size phrase", response)
+        self.assertIn("direct Ark manifest queries byte-for-byte and in order", response)
+        self.assertIn("or claim numeric search volume", response)
         self.assertEqual(
             ["mini dress", "puff sleeve mini dress", "cocktail mini dress"],
             re.findall(r"(?m)^\d+\. `([^`]+)`$", response),
         )
         for required_behavior in (
-            "explicitly selected Chrome session",
-            "30–50 visible cards per query, including ads",
-            "at least two distinct query sets",
-            "structural/style facts only",
-            "must not include color or size terms such as `red` or `petite`",
-            "keep the current exact `mini dress` search tab",
-            "close only the other task-created SHEIN search and product-detail tabs",
-            "preserve the pre-existing user SHEIN tab and the Feishu tab",
-            "perform at most three Chrome retry rounds",
-            "wait 10 seconds after the first timeout and 15 seconds after the second timeout",
-            "re-enumerate task-created tabs in every round",
-            "after a third timeout, preserve the checkpoint and ask the user to reconnect Chrome",
-            "allow 100 seconds for navigation commitment",
-            "wait only for navigation `commit`",
-            "allow a separate 150 seconds for visible product-grid readiness",
-            "poll visible readiness in bounded intervals",
-            "reuse the accessible exact-query tab after a timeout",
-            "replace it only when it is absent, stale, or on the wrong URL",
+            "active, explicitly selected exact-query `us.shein.com` tab",
+            "a 30–50 card count",
+            "requested recurring details in collector order",
+            "non-color, non-size garment facts",
+            "`red` and `petite` must not enter queries",
+            "Preserve the current exact-query SHEIN search tab",
+            "Close only the other task-created SHEIN search and product-detail tabs",
+            "pre-existing user SHEIN tab, the Feishu tab",
+            "For each of at most three Chrome rounds",
+            "After round 1, wait 10 seconds; after round 2, wait 15 seconds",
+            "Re-enumerate task-created automation tabs",
+            "After round 3, preserve the checkpoint and do not start a fourth DOM round",
+            "Navigation commitment has a 100-second budget",
+            "`waitUntil: \"commit\"`",
+            "visible product-grid readiness a separate 150-second budget",
+            "Poll using short, finite visible-DOM operations",
+            "reuse the accessible exact-query tab after navigation or DOM timeouts",
+            "Replace it only if it is absent, stale, or on the wrong URL",
+            "chrome-extension/shein-evidence-collector",
+            "choose **Load unpacked**",
+            "Structured visible-page fields are authoritative",
+            "OCR cannot populate, infer, repair, or override missing fields",
+            "screenshot validation failure means zero Result Base writes and zero `任务状态` writes",
+            "Dry-run itself never upserts records, uploads attachments, or changes task status",
         ):
             with self.subTest(required_behavior=required_behavior):
                 self.assertIn(required_behavior, response)
@@ -426,8 +512,8 @@ class SkillContractTests(unittest.TestCase):
             r"(?i)\bwill claim numeric traffic volume\b",
             r"(?i)\bvisual features (?:may|can|will) include .*\b(?:red|petite)\b",
             r"(?i)close (?:the )?pre-existing user SHEIN tab",
-            r"(?i)switch browsers",
-            r"(?i)(?:fourth|4th) (?:retry )?round",
+            r"(?i)\bI (?:will|would) switch browsers\b",
+            r"(?i)\bI (?:will|would) start (?:a )?(?:fourth|4th) (?:retry |DOM )?round\b",
             r"(?i)retry (?:forever|indefinitely|until it works)",
             r"(?i)wait for (?:the )?(?:full|complete) page load",
             r"(?i)replace (?:the )?accessible exact-query tab after (?:a )?timeout",
@@ -435,15 +521,15 @@ class SkillContractTests(unittest.TestCase):
             with self.subTest(prohibited_behavior=prohibited_behavior):
                 self.assertIsNone(re.search(prohibited_behavior, response))
         self.assertIn(
-            "missing sold count does not reject this SHEIN candidate",
+            "is not rejected merely because sold count is absent",
             response,
         )
         self.assertIn(
-            "marketplace category text does not reject the candidate",
+            "audit-only category text and does not reject imagery",
             response,
         )
         self.assertIn(
-            "reject the second candidate as `visual_structure_mismatch`",
+            "must be rejected as `visual_structure_mismatch`",
             response,
         )
 

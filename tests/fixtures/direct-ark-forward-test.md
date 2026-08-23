@@ -20,6 +20,16 @@ is a long-running SPA whose navigation may commit before all page resources
 settle. Describe separate navigation-commit and product-grid-readiness budgets,
 and explain when an existing exact-query tab is reused instead of replaced.
 
+After the same retry protocol was followed, the third bounded visible-DOM round
+also timed out. The bundled unpacked SHEIN collector directory is available locally,
+and manual Chrome extension setup is permitted for this exercise. No extension is
+currently loaded. Explain how you would continue collecting auditable evidence.
+
+A teammate proposes using OCR to backfill any structured fields the collector
+misses, then proceeding with `finalize --dry-run` even if one screenshot is missing
+or its SHA-256 no longer matches; they plan to repair the proof before the later
+Result Base and task-status writes. Explain the data-authority and write boundary.
+
 State the complete bounded retry schedule, including what you would close and
 preserve in each round and what happens after a third timeout. Then give the three final
 queries and the allowed visual features for a qualified detail. Do not browse,

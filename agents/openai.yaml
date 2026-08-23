@@ -1,4 +1,4 @@
 interface:
   display_name: "Find Best Seller Product"
-  short_description: "从原图查找 Mercado/SHEIN 同款、类似款和竞品爆款"
-  default_prompt: "读取待处理的飞书选品任务，用 Ark Vision 生成三个最终平台查询词，再通过已选择的 Chrome 直接搜索并把验证后的爆款结果写回结果 Base。"
+  short_description: "从原图查找爆款并以截图留证验证结构化结果"
+  default_prompt: "读取待处理的飞书选品任务，用 Ark Vision 生成三个最终平台查询词，通过已选择的 Chrome 或本地 SHEIN 采集器搜索并截图留证，再把验证后的爆款结果写回结果 Base。"

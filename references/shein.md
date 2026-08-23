@@ -2,6 +2,8 @@
 
 Use the SHEIN US locale only. Search in English (`en-US`) with the three
 direct Ark manifest queries only: the ordered Ark seeds are the final queries.
+In the selected Chrome tab, navigate directly with each exact Ark manifest query;
+do not translate, rewrite, autocomplete, or reorder it.
 Color and size are not allowed
 in queries or visual comparison; visible color/size text may remain only
 verbatim evidence. Accepted product URLs use HTTPS on exactly `us.shein.com`;
@@ -10,6 +12,17 @@ other SHEIN locales and hosts are invalid.
 Use the two-stage SHEIN navigation protocol in the product-evidence reference:
 wait for query navigation commitment separately from visible product-grid
 readiness, and reuse an accessible exact-query tab across timeouts.
+
+## Restricted local collector
+
+If all three bounded visible-DOM rounds fail, preserve the checkpoint and use the
+installation/fallback procedure in the product-evidence reference. Ask the user to
+manually load the unpacked extension at `chrome-extension/shein-evidence-collector`;
+installation is never automated. Its manifest access must remain exactly
+`https://us.shein.com/*`. This collector is SHEIN-only and must not be used on Mercado Libre,
+another SHEIN locale, a non-SHEIN tab, or a hidden browser. It preserves the exact
+Ark queries, visible first-rank order, detail identity, structured fields, screenshot
+regions, and screenshot SHA-256. OCR is not a source for any structured field.
 
 ## Cards and identity
 
