@@ -709,9 +709,20 @@ class CheckpointStore:
                 current_stage = current["stage"]
                 current_index = STAGES.index(current_stage)  # type: ignore[arg-type]
                 requested_index = STAGES.index(stage)
+                current_stages = current["stages"]
+                current_evidence = current_stages.get("evidence_validated")
+                if (
+                    current_stage == "evidence_validated"
+                    and isinstance(current_stages, dict)
+                    and (
+                        not isinstance(current_evidence, Mapping)
+                        or _evidence_core_keys(current_evidence) is None
+                    )
+                ):
+                    raise CheckpointError("historical checkpoint is read-only")
                 if requested_index not in (current_index, current_index + 1):
                     raise CheckpointError("invalid checkpoint transition")
-                stages = dict(current["stages"])  # type: ignore[arg-type]
+                stages = dict(current_stages)
                 if requested_index == current_index:
                     existing = stages[stage]
                     if existing != normalized and not (

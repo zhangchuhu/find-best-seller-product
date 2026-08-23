@@ -156,7 +156,7 @@ class CheckpointBehaviorTests(unittest.TestCase):
             },
         )
 
-    def test_screenshotless_evidence_core_is_immutable(self) -> None:
+    def test_historical_screenshotless_evidence_is_loadable_but_read_only(self) -> None:
         self.store.save_stage("recLegacyEvidence1", "prepared", {"prepared": True})
         self.store.save_stage(
             "recLegacyEvidence1", "queries_resolved",
@@ -191,11 +191,19 @@ class CheckpointBehaviorTests(unittest.TestCase):
             screenshotless,
             self.store.load("recLegacyEvidence1")["stages"]["evidence_validated"],
         )
-        with self.assertRaisesRegex(CheckpointError, "immutable"):
+        before = checkpoint_path.read_bytes()
+        with self.assertRaisesRegex(CheckpointError, "read-only"):
             self.store.save_stage(
                 "recLegacyEvidence1", "evidence_validated",
                 {**screenshotless, "validated_at": "2026-08-21T10:01:00Z"},
             )
+        self.assertEqual(before, checkpoint_path.read_bytes())
+        with self.assertRaisesRegex(CheckpointError, "read-only"):
+            self.store.save_stage(
+                "recLegacyEvidence1", "finalized",
+                {"result_count": 0, "completed": []},
+            )
+        self.assertEqual(before, checkpoint_path.read_bytes())
 
     def test_new_evidence_stage_requires_paired_screenshot_fields(self) -> None:
         core = {
