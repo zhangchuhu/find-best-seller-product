@@ -678,6 +678,8 @@ def _detail_candidate(
     platform: Platform,
     task: Task,
     profile: VisualProfile,
+    *,
+    allow_historical_category_mismatch: bool = False,
 ) -> tuple[VerifiedCandidate | None, dict[str, object]]:
     if not isinstance(raw, dict) or "evidence_refs" not in raw:
         raise _error("screenshot evidence is invalid")
@@ -697,18 +699,21 @@ def _detail_candidate(
             raise _error("qualified detail cannot have a rejection reason")
     elif not isinstance(reason, str) or reason not in _REJECTION_REASONS:
         raise _error("detail rejection reason is invalid")
-    if reason == "category_mismatch":
+    if reason == "category_mismatch" and not allow_historical_category_mismatch:
         raise _error(_SCREENSHOT_RECOLLECTION_ERROR)
 
-    required_purposes = {
-        None: {"visual", "metrics"},
-        "visual_structure_mismatch": {"visual"},
-        "imagery_ambiguous_or_inaccessible": {"visual"},
-        "metric_missing_or_ambiguous": {"metrics"},
-        "threshold_failure": {"metrics"},
-        "identity_changed": {"access_state"},
-        "detail_inaccessible": {"access_state"},
-    }[reason]
+    if reason == "category_mismatch":
+        required_purposes = {"visual"}
+    else:
+        required_purposes = {
+            None: {"visual", "metrics"},
+            "visual_structure_mismatch": {"visual"},
+            "imagery_ambiguous_or_inaccessible": {"visual"},
+            "metric_missing_or_ambiguous": {"metrics"},
+            "threshold_failure": {"metrics"},
+            "identity_changed": {"access_state"},
+            "detail_inaccessible": {"access_state"},
+        }[reason]
     evidence_refs = detail_value["evidence_refs"]
     if not isinstance(evidence_refs, list):
         raise _error("screenshot evidence is invalid")
@@ -913,6 +918,8 @@ def _canonical_evidence_payload(
     resolved: Mapping[str, object],
     final_queries: tuple[str, str, str],
     record_id: str,
+    *,
+    allow_historical_category_mismatch: bool = False,
 ) -> dict[str, object]:
     """Replay product evidence into its only accepted normalized payload."""
     try:
@@ -1039,6 +1046,7 @@ def _canonical_evidence_payload(
     for index, raw_detail in enumerate(details):
         candidate, normalized = _detail_candidate(
             raw_detail, merged, proofs, task.platform, task, profile,
+            allow_historical_category_mismatch=allow_historical_category_mismatch,
         )
         outcome_identity = normalized["identity"]
         if outcome_identity in detail_ids:
@@ -1146,7 +1154,7 @@ def _screenshot_backing_missing(evidence: object) -> bool:
 
 
 def _validated_payload(
-    checkpoint: Mapping[str, object], run_dir: Path
+    checkpoint: Mapping[str, object], run_dir: Path, *, historical_finalized: bool = False,
 ) -> tuple[Task, Path, list[VerifiedCandidate], dict[str, object]]:
     try:
         stages = checkpoint["stages"]
@@ -1160,6 +1168,8 @@ def _validated_payload(
             checkpoint, checkpoint["record_id"], run_dir,
         )
         provenance_key, _expected_provenance = _resolution_provenance(resolved, final_queries)
+        if historical_finalized and checkpoint.get("stage") != "finalized":
+            raise ValueError
         allowed = {
             provenance_key, "evidence", "candidates",
             "observation_count", "recurring_count", "detail_count",
@@ -1182,6 +1192,9 @@ def _validated_payload(
         canonical = _canonical_evidence_payload(
             evidence["evidence"], run_dir, prepared, resolved, final_queries,
             checkpoint["record_id"],
+            allow_historical_category_mismatch=(
+                historical_finalized and provenance_key == "autocomplete_provenance"
+            ),
         )
         canonical_keys = {
             provenance_key, "evidence", "candidates",
@@ -1342,7 +1355,7 @@ def _v2_finalized_summary(
             )
         else:
             task, _source, candidates, validated = _validated_payload(
-                checkpoint, run_dir,
+                checkpoint, run_dir, historical_finalized=True,
             )
         selected = select_results(task, candidates)
         intended = [

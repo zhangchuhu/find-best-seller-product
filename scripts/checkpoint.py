@@ -731,6 +731,12 @@ class CheckpointStore:
             if (
                 stage == "evidence_validated"
                 and stage not in stages
+                and _evidence_core_keys(normalized) is None
+            ):
+                raise CheckpointError("checkpoint evidence requires screenshot proof")
+            if (
+                stage == "evidence_validated"
+                and stage not in stages
                 and "write_progress" in normalized
             ):
                 raise CheckpointError("checkpoint write progress must be initialized by workflow")

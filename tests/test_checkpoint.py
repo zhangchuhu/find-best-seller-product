@@ -13,6 +13,25 @@ from unittest import mock
 from scripts.checkpoint import CheckpointError, CheckpointStore, STAGES
 
 
+def evidence_payload(**changes: object) -> dict[str, object]:
+    value: dict[str, object] = {
+        "query_provenance": {
+            "source": "ark_seeds", "queries": ["one", "two", "three"],
+        },
+        "evidence": {"queries": []},
+        "candidates": [],
+        "observation_count": 90,
+        "recurring_count": 2,
+        "detail_count": 2,
+        "screenshot_manifest": [{"id": "proof-1"}],
+        "screenshot_count": 1,
+        "evidence_digest": "a" * 64,
+        "validated_at": "2026-08-21T10:00:00Z",
+    }
+    value.update(changes)
+    return value
+
+
 class CheckpointBehaviorTests(unittest.TestCase):
     def setUp(self) -> None:
         self.directory = tempfile.TemporaryDirectory()
@@ -39,16 +58,17 @@ class CheckpointBehaviorTests(unittest.TestCase):
         self.assertEqual("prepared", self.store.load("recABC123")["stage"])  # type: ignore[index]
 
     def test_all_transitions_preserve_earlier_stage_payloads(self) -> None:
+        evidence = evidence_payload()
         self.store.save_stage("recFlow1", "prepared", {"queries": ["one", "two"]})
         self.store.save_stage("recFlow1", "queries_resolved", {"queries": ["one", "two", "three"]})
-        self.store.save_stage("recFlow1", "evidence_validated", {"count": 2})
+        self.store.save_stage("recFlow1", "evidence_validated", evidence)
         self.store.save_stage("recFlow1", "finalized", {"rows": 1})
 
         self.assertEqual(
             {
                 "prepared": {"queries": ["one", "two"]},
                 "queries_resolved": {"queries": ["one", "two", "three"]},
-                "evidence_validated": {"count": 2},
+                "evidence_validated": evidence,
                 "finalized": {"rows": 1},
             },
             self.store.load("recFlow1")["stages"],  # type: ignore[index]
@@ -61,9 +81,13 @@ class CheckpointBehaviorTests(unittest.TestCase):
         self.store.save_stage("recReplace1", "queries_resolved", {"queries": ["one", "two", "three"]})
         with self.assertRaisesRegex(CheckpointError, "immutable"):
             self.store.save_stage("recReplace1", "queries_resolved", {"queries": ["one", "two", "four"]})
-        self.store.save_stage("recReplace1", "evidence_validated", {"count": 1})
+        evidence = evidence_payload()
+        self.store.save_stage("recReplace1", "evidence_validated", evidence)
         with self.assertRaisesRegex(CheckpointError, "immutable"):
-            self.store.save_stage("recReplace1", "evidence_validated", {"count": 3})
+            self.store.save_stage(
+                "recReplace1", "evidence_validated",
+                evidence_payload(evidence_digest="b" * 64),
+            )
         self.store.save_stage("recReplace1", "finalized", {"rows": 1})
         with self.assertRaisesRegex(CheckpointError, "immutable"):
             self.store.save_stage("recReplace1", "finalized", {"rows": 2})
@@ -71,7 +95,7 @@ class CheckpointBehaviorTests(unittest.TestCase):
         loaded = self.store.load("recReplace1")
         assert loaded is not None
         self.assertEqual({"attempt": 1}, loaded["stages"]["prepared"])
-        self.assertEqual({"count": 1}, loaded["stages"]["evidence_validated"])
+        self.assertEqual(evidence, loaded["stages"]["evidence_validated"])
 
     def test_evidence_current_stage_allows_only_monotonic_metadata_and_progress(self) -> None:
         self.store.save_stage("recEvidence1", "prepared", {"prepared": True})
@@ -150,14 +174,62 @@ class CheckpointBehaviorTests(unittest.TestCase):
             "evidence_digest": "a" * 64,
             "validated_at": "2026-08-21T10:00:00Z",
         }
-        self.store.save_stage(
-            "recLegacyEvidence1", "evidence_validated", screenshotless,
+        checkpoint_path = self.root / "recLegacyEvidence1" / "checkpoint.json"
+        checkpoint_path.write_text(json.dumps({
+            "record_id": "recLegacyEvidence1",
+            "stage": "evidence_validated",
+            "stages": {
+                "prepared": {"prepared": True},
+                "queries_resolved": {
+                    "source": "ark_seeds", "queries": ["one", "two", "three"],
+                },
+                "evidence_validated": screenshotless,
+            },
+            "version": 2,
+        }), encoding="utf-8")
+        self.assertEqual(
+            screenshotless,
+            self.store.load("recLegacyEvidence1")["stages"]["evidence_validated"],
         )
         with self.assertRaisesRegex(CheckpointError, "immutable"):
             self.store.save_stage(
                 "recLegacyEvidence1", "evidence_validated",
                 {**screenshotless, "validated_at": "2026-08-21T10:01:00Z"},
             )
+
+    def test_new_evidence_stage_requires_paired_screenshot_fields(self) -> None:
+        core = {
+            "query_provenance": {
+                "source": "ark_seeds", "queries": ["one", "two", "three"],
+            },
+            "evidence": {"queries": []},
+            "candidates": [],
+            "observation_count": 90,
+            "recurring_count": 2,
+            "detail_count": 2,
+            "screenshot_manifest": [{"id": "proof-1"}],
+            "screenshot_count": 1,
+            "evidence_digest": "a" * 64,
+            "validated_at": "2026-08-21T10:00:00Z",
+        }
+        for index, missing in enumerate(
+            ({"screenshot_manifest", "screenshot_count"}, {"screenshot_manifest"}, {"screenshot_count"}),
+            start=1,
+        ):
+            with self.subTest(missing=missing):
+                record_id = f"recMissingScreenshots{index}"
+                self.store.save_stage(record_id, "prepared", {"prepared": True})
+                self.store.save_stage(
+                    record_id, "queries_resolved",
+                    {"source": "ark_seeds", "queries": ["one", "two", "three"]},
+                )
+                payload = {key: value for key, value in core.items() if key not in missing}
+                with self.assertRaisesRegex(CheckpointError, "screenshot"):
+                    self.store.save_stage(record_id, "evidence_validated", payload)
+                loaded = self.store.load(record_id)
+                assert loaded is not None
+                self.assertEqual("queries_resolved", loaded["stage"])
+                self.assertNotIn("evidence_validated", loaded["stages"])
 
     def test_legacy_v1_is_read_only_only_after_the_exact_legacy_finalized_prefix(self) -> None:
         record_id = "recLegacy1"
@@ -207,7 +279,7 @@ class CheckpointBehaviorTests(unittest.TestCase):
         self.assertFalse(self.store.completed("recStatus1", "evidence_validated"))
         self.store.save_stage("recStatus1", "queries_resolved", {})
         self.assertTrue(self.store.completed("recStatus1", "queries_resolved"))
-        self.store.save_stage("recStatus1", "evidence_validated", {})
+        self.store.save_stage("recStatus1", "evidence_validated", evidence_payload())
         self.assertTrue(self.store.completed("recStatus1", "prepared"))
         self.assertTrue(self.store.completed("recStatus1", "evidence_validated"))
         self.assertFalse(self.store.completed("recStatus1", "finalized"))
@@ -449,7 +521,7 @@ class CheckpointAtomicityTests(unittest.TestCase):
         alternate_store = CheckpointStore(alternate_root)
         alternate_store.save_stage(record_id, "prepared", {"origin": "replacement"})
         alternate_store.save_stage(record_id, "queries_resolved", {"origin": "replacement"})
-        alternate_store.save_stage(record_id, "evidence_validated", {"origin": "replacement"})
+        alternate_store.save_stage(record_id, "evidence_validated", evidence_payload())
         alternate_store.save_stage(record_id, "finalized", {"origin": "replacement"})
         replacement = alternate_root / record_id
         parked = Path(self.directory.name) / "parked-transition-task"
@@ -670,7 +742,7 @@ class CheckpointSecurityTests(unittest.TestCase):
         with self.assertRaises(CheckpointError):
             self.store.save_stage("recTransition1", "finalized", {})
         self.store.save_stage("recTransition1", "queries_resolved", {"step": 2})
-        self.store.save_stage("recTransition1", "evidence_validated", {"step": 2})
+        self.store.save_stage("recTransition1", "evidence_validated", evidence_payload())
         with self.assertRaises(CheckpointError):
             self.store.save_stage("recTransition1", "prepared", {})
 

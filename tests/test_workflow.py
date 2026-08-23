@@ -252,6 +252,24 @@ def load_evidence(root: Path, name: str) -> dict[str, object]:
     return value
 
 
+def recompute_evidence_digest(evidence: dict[str, object]) -> None:
+    provenance_key = (
+        "query_provenance" if "query_provenance" in evidence
+        else "autocomplete_provenance"
+    )
+    core_keys = {
+        provenance_key, "evidence", "candidates",
+        "observation_count", "recurring_count", "detail_count",
+    }
+    if {"screenshot_manifest", "screenshot_count"} <= set(evidence):
+        core_keys |= {"screenshot_manifest", "screenshot_count"}
+    encoded = json.dumps(
+        {key: evidence[key] for key in core_keys},
+        ensure_ascii=False, sort_keys=True, separators=(",", ":"), allow_nan=False,
+    ).encode("utf-8")
+    evidence["evidence_digest"] = hashlib.sha256(encoded).hexdigest()
+
+
 def strip_screenshot_backing(checkpoint: dict[str, object]) -> None:
     evidence = checkpoint["stages"]["evidence_validated"]
     evidence["evidence"].pop("screenshots")
@@ -262,19 +280,7 @@ def strip_screenshot_backing(checkpoint: dict[str, object]) -> None:
         detail.pop("evidence_refs")
     evidence.pop("screenshot_manifest")
     evidence.pop("screenshot_count")
-    provenance_key = (
-        "query_provenance" if "query_provenance" in evidence
-        else "autocomplete_provenance"
-    )
-    core_keys = {
-        provenance_key, "evidence", "candidates",
-        "observation_count", "recurring_count", "detail_count",
-    }
-    encoded = json.dumps(
-        {key: evidence[key] for key in core_keys},
-        ensure_ascii=False, sort_keys=True, separators=(",", ":"), allow_nan=False,
-    ).encode("utf-8")
-    evidence["evidence_digest"] = hashlib.sha256(encoded).hexdigest()
+    recompute_evidence_digest(evidence)
 
 
 def evidence_fixture(root: Path, name: str) -> Path:
@@ -1439,6 +1445,80 @@ class LegacyScreenshotEvidenceTests(unittest.TestCase):
                     clock=frozen_clock(),
                 )
                 self.assertIn("Already finalized 2", summary)
+                self.assertEqual([], lark.events)
+                self.assertEqual(before_checkpoint, checkpoint_path.read_bytes())
+                self.assertEqual(before_results, results_path.read_bytes())
+                self.assertFalse((run_dir / ".finalize.lock").exists())
+
+    def test_finalized_legacy_autocomplete_category_mismatch_remains_read_only_history(self):
+        for dry_run in (True, False):
+            with self.subTest(dry_run=dry_run), tempfile.TemporaryDirectory() as directory:
+                root = Path(directory)
+                prepare_only(root)
+                run_dir = root / "rec_source"
+                checkpoint_path = run_dir / "checkpoint.json"
+                checkpoint = json.loads(checkpoint_path.read_text(encoding="utf-8"))
+                checkpoint["stage"] = "prepared"
+                checkpoint["stages"].pop("queries_resolved")
+                checkpoint_path.write_text(json.dumps(checkpoint), encoding="utf-8")
+                resolve_queries(run_dir, FIXTURES / "shein-autocomplete.json")
+                validate_evidence(
+                    run_dir, evidence_fixture(root, "shein-evidence.json"),
+                    clock=frozen_clock(),
+                )
+                finalize(run_dir, lark_client=FakeLark(), clock=frozen_clock())
+
+                checkpoint = json.loads(checkpoint_path.read_text(encoding="utf-8"))
+                evidence = checkpoint["stages"]["evidence_validated"]
+                rejected_identity = evidence["evidence"]["details"][0]["identity"]
+                evidence["evidence"]["details"][0].update({
+                    "status": "rejected",
+                    "reason": "category_mismatch",
+                    "match_level": None,
+                    "visual_features": None,
+                })
+                evidence["candidates"] = [
+                    candidate for candidate in evidence["candidates"]
+                    if candidate["identity"] != rejected_identity
+                ]
+                recompute_evidence_digest(evidence)
+                candidate = evidence["candidates"][0]
+                prepared_task = checkpoint["stages"]["prepared"]["task"]
+                business_key = json.dumps(
+                    [prepared_task["sku"], prepared_task["platform"], candidate["canonical_url"]],
+                    ensure_ascii=False, separators=(",", ":"),
+                )
+                evidence["write_progress"] = {
+                    "intended": [business_key],
+                    "completed": [business_key],
+                    "writes_complete": True,
+                }
+                checkpoint["stages"]["finalized"] = {
+                    "result_count": 1,
+                    "completed": [business_key],
+                }
+                checkpoint_path.write_text(json.dumps(checkpoint), encoding="utf-8")
+                results_path = run_dir / "final-results.json"
+                results_path.write_text(json.dumps({
+                    "task_record_id": prepared_task["record_id"],
+                    "platform": prepared_task["platform"],
+                    "result_count": 1,
+                    "results": [candidate],
+                }), encoding="utf-8")
+                (run_dir / ".finalize.lock").unlink(missing_ok=True)
+
+                before_checkpoint = checkpoint_path.read_bytes()
+                before_results = results_path.read_bytes()
+                lark = FakeLark()
+                with patch(
+                    "scripts.workflow._record_lock",
+                    side_effect=AssertionError("historical finalization must not lock"),
+                ):
+                    summary = finalize(
+                        run_dir, dry_run=dry_run, lark_client=lark,
+                        clock=frozen_clock(),
+                    )
+                self.assertIn("Already finalized 1", summary)
                 self.assertEqual([], lark.events)
                 self.assertEqual(before_checkpoint, checkpoint_path.read_bytes())
                 self.assertEqual(before_results, results_path.read_bytes())
