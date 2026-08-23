@@ -8,6 +8,7 @@ import json
 import multiprocessing
 import os
 from pathlib import Path
+import struct
 import subprocess
 import sys
 import tempfile
@@ -15,6 +16,7 @@ import threading
 import time
 import unittest
 from unittest.mock import patch
+import zlib
 
 from scripts.ark_vision import VisualProfile
 from scripts.checkpoint import CheckpointError, CheckpointStore
@@ -35,12 +37,25 @@ from scripts.workflow import (
 
 ROOT = Path(__file__).resolve().parents[1]
 FIXTURES = ROOT / "tests" / "fixtures"
-SCREENSHOT_PNG = bytes.fromhex(
-    "89504e470d0a1a0a0000000d49484452000003e8000003200806000000b018483d"
-    "0000001b49444154789cedc13101000000c2a0f54f6d0c1fa000000080bb010fa1"
-    "0001d9a128800000000049454e44ae426082"
-)
-SCREENSHOT_SHA256 = "2ec9f433b1ca00dca25c5cbc5aaea8645e4fedf12ba3aa36c19a474e4b9ab2c6"
+
+
+def png_chunk(kind: bytes, data: bytes) -> bytes:
+    checksum = zlib.crc32(kind + data) & 0xFFFFFFFF
+    return struct.pack(">I", len(data)) + kind + data + struct.pack(">I", checksum)
+
+
+def complete_png_bytes(width: int = 1000, height: int = 800) -> bytes:
+    raw = b"".join(b"\x00" + b"\x00\x00\x00\x00" * width for _ in range(height))
+    return (
+        b"\x89PNG\r\n\x1a\n"
+        + png_chunk(b"IHDR", struct.pack(">IIBBBBB", width, height, 8, 6, 0, 0, 0))
+        + png_chunk(b"IDAT", zlib.compress(raw, 9))
+        + png_chunk(b"IEND", b"")
+    )
+
+
+SCREENSHOT_PNG = complete_png_bytes()
+SCREENSHOT_SHA256 = "dc3dbb5747c422ff1aafdc03cd31df676d325d6e2f02e8e4e5e06efdf18bca2e"
 
 
 def task(platform: Platform = Platform.SHEIN_US, limit: int = 2) -> Task:
@@ -237,6 +252,31 @@ def load_evidence(root: Path, name: str) -> dict[str, object]:
     return value
 
 
+def strip_screenshot_backing(checkpoint: dict[str, object]) -> None:
+    evidence = checkpoint["stages"]["evidence_validated"]
+    evidence["evidence"].pop("screenshots")
+    for block in evidence["evidence"]["queries"]:
+        for observation in block["observations"]:
+            observation.pop("evidence_ref")
+    for detail in evidence["evidence"]["details"]:
+        detail.pop("evidence_refs")
+    evidence.pop("screenshot_manifest")
+    evidence.pop("screenshot_count")
+    provenance_key = (
+        "query_provenance" if "query_provenance" in evidence
+        else "autocomplete_provenance"
+    )
+    core_keys = {
+        provenance_key, "evidence", "candidates",
+        "observation_count", "recurring_count", "detail_count",
+    }
+    encoded = json.dumps(
+        {key: evidence[key] for key in core_keys},
+        ensure_ascii=False, sort_keys=True, separators=(",", ":"), allow_nan=False,
+    ).encode("utf-8")
+    evidence["evidence_digest"] = hashlib.sha256(encoded).hexdigest()
+
+
 def evidence_fixture(root: Path, name: str) -> Path:
     value = load_fixture(name)
     attach_screenshot_proof(value, root / "rec_source")
@@ -401,6 +441,45 @@ class EvidenceValidationTests(unittest.TestCase):
                     self.assertEqual(2, len(evidence["candidates"]))
                 finally:
                     context.cleanup()
+
+    def test_fixed_screenshot_png_contains_every_declared_rgba_scanline(self):
+        offset = 8
+        width = height = None
+        image_data = bytearray()
+        while offset < len(SCREENSHOT_PNG):
+            length = int.from_bytes(SCREENSHOT_PNG[offset:offset + 4], "big")
+            kind = SCREENSHOT_PNG[offset + 4:offset + 8]
+            data = SCREENSHOT_PNG[offset + 8:offset + 8 + length]
+            if kind == b"IHDR":
+                width = int.from_bytes(data[:4], "big")
+                height = int.from_bytes(data[4:8], "big")
+            elif kind == b"IDAT":
+                image_data.extend(data)
+            offset += 12 + length
+        self.assertEqual((1000, 800), (width, height))
+        self.assertEqual(height * (1 + width * 4), len(zlib.decompress(image_data)))
+
+    def test_screenshot_backed_legacy_category_reason_requires_recollection(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            prepare_only(root)
+            checkpoint_path = root / "rec_source" / "checkpoint.json"
+            checkpoint = json.loads(checkpoint_path.read_text(encoding="utf-8"))
+            checkpoint["stage"] = "prepared"
+            checkpoint["stages"].pop("queries_resolved")
+            checkpoint_path.write_text(json.dumps(checkpoint), encoding="utf-8")
+            resolve_queries(root / "rec_source", FIXTURES / "shein-autocomplete.json")
+            value = load_evidence(root, "shein-evidence.json")
+            value["details"][0].update({
+                "status": "rejected", "reason": "category_mismatch",
+                "category": "shoes", "match_level": None,
+                "visual_features": None,
+            })
+            path = write_evidence(root, value, "legacy-category.json")
+            with self.assertRaisesRegex(
+                WorkflowError, "screenshot-backed evidence must be recollected",
+            ):
+                validate_evidence(root / "rec_source", path, clock=frozen_clock())
 
     def test_validate_requires_screenshot_root_and_observation_reference(self):
         mutations = {
@@ -908,7 +987,7 @@ class EvidenceValidationTests(unittest.TestCase):
             })
             path = write_evidence(root, value, "legacy-category-reason.json")
 
-            with self.assertRaisesRegex(WorkflowError, "legacy"):
+            with self.assertRaisesRegex(WorkflowError, "screenshot-backed evidence must be recollected"):
                 validate_evidence(root / "rec_source", path, clock=frozen_clock())
 
     def test_exhaustive_rejected_outcomes_allow_a_complete_zero_result(self):
@@ -1283,6 +1362,89 @@ class QueryResolutionTests(unittest.TestCase):
             self.assertIn("Already finalized 1", finalize(run_dir, lark_client=FakeLark()))
 
 
+class LegacyScreenshotEvidenceTests(unittest.TestCase):
+    def _screenshotless_checkpoint(
+        self, root: Path, *, finalized: bool,
+    ) -> tuple[Path, Path, Path]:
+        prepare_run(root)
+        validate_evidence(
+            root / "rec_source", evidence_fixture(root, "shein-evidence.json"),
+            clock=frozen_clock(),
+        )
+        run_dir = root / "rec_source"
+        if finalized:
+            finalize(run_dir, lark_client=FakeLark(), clock=frozen_clock())
+        checkpoint_path = run_dir / "checkpoint.json"
+        checkpoint = json.loads(checkpoint_path.read_text(encoding="utf-8"))
+        strip_screenshot_backing(checkpoint)
+        checkpoint_path.write_text(json.dumps(checkpoint), encoding="utf-8")
+        lock_path = run_dir / ".finalize.lock"
+        if lock_path.exists():
+            lock_path.unlink()
+        return run_dir, checkpoint_path, run_dir / "final-results.json"
+
+    def test_screenshotless_evidence_validated_requires_recollection_without_side_effects(self):
+        for dry_run in (True, False):
+            with self.subTest(dry_run=dry_run), tempfile.TemporaryDirectory() as directory:
+                root = Path(directory)
+                run_dir, checkpoint_path, results_path = self._screenshotless_checkpoint(
+                    root, finalized=False,
+                )
+                before_checkpoint = checkpoint_path.read_bytes()
+                lark = FakeLark()
+                with self.assertRaisesRegex(
+                    WorkflowError, "screenshot-backed evidence must be recollected",
+                ):
+                    finalize(
+                        run_dir, dry_run=dry_run, lark_client=lark,
+                        clock=frozen_clock(),
+                    )
+                self.assertEqual([], lark.events)
+                self.assertEqual(before_checkpoint, checkpoint_path.read_bytes())
+                self.assertFalse(results_path.exists())
+                self.assertFalse((run_dir / ".finalize.lock").exists())
+
+    def test_prepared_and_queries_resolved_stages_keep_resume_instruction(self):
+        for stage in ("prepared", "queries_resolved"):
+            for dry_run in (True, False):
+                with self.subTest(stage=stage, dry_run=dry_run), tempfile.TemporaryDirectory() as directory:
+                    root = Path(directory)
+                    prepare_only(root)
+                    run_dir = root / "rec_source"
+                    checkpoint_path = run_dir / "checkpoint.json"
+                    if stage == "prepared":
+                        checkpoint = json.loads(checkpoint_path.read_text(encoding="utf-8"))
+                        checkpoint["stage"] = "prepared"
+                        checkpoint["stages"].pop("queries_resolved")
+                        checkpoint_path.write_text(json.dumps(checkpoint), encoding="utf-8")
+                    with self.assertRaises(WorkflowError) as raised:
+                        finalize(run_dir, dry_run=dry_run, lark_client=FakeLark())
+                    self.assertEqual(NEXT_STEP, str(raised.exception))
+
+    def test_screenshotless_finalized_checkpoint_remains_read_only_history(self):
+        for dry_run in (True, False):
+            with self.subTest(dry_run=dry_run), tempfile.TemporaryDirectory() as directory:
+                root = Path(directory)
+                run_dir, checkpoint_path, results_path = self._screenshotless_checkpoint(
+                    root, finalized=True,
+                )
+                for target in (run_dir / "screenshots").iterdir():
+                    target.unlink()
+                (run_dir / "screenshots").rmdir()
+                before_checkpoint = checkpoint_path.read_bytes()
+                before_results = results_path.read_bytes()
+                lark = FakeLark()
+                summary = finalize(
+                    run_dir, dry_run=dry_run, lark_client=lark,
+                    clock=frozen_clock(),
+                )
+                self.assertIn("Already finalized 2", summary)
+                self.assertEqual([], lark.events)
+                self.assertEqual(before_checkpoint, checkpoint_path.read_bytes())
+                self.assertEqual(before_results, results_path.read_bytes())
+                self.assertFalse((run_dir / ".finalize.lock").exists())
+
+
 class FinalizeTests(unittest.TestCase):
     def _validated(self, root: Path, limit=2):
         prepare_run(root, limit=limit)
@@ -1290,6 +1452,65 @@ class FinalizeTests(unittest.TestCase):
             root / "rec_source", evidence_fixture(root, "shein-evidence.json"),
             clock=frozen_clock(),
         )
+
+    def _assert_screenshot_tamper_rejected(self, mutate, *, dry_run: bool) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            self._validated(root)
+            run_dir = root / "rec_source"
+            target = next((run_dir / "screenshots").iterdir())
+            mutate(run_dir, target)
+            lark = FakeLark()
+            with self.assertRaisesRegex(WorkflowError, "screenshot evidence is invalid"):
+                finalize(
+                    run_dir, dry_run=dry_run, lark_client=lark,
+                    clock=frozen_clock(),
+                )
+            self.assertEqual([], lark.events)
+            self.assertFalse((run_dir / "final-results.json").exists())
+
+    def test_finalize_rejects_deleted_screenshot_before_output_or_base_calls(self):
+        for dry_run in (True, False):
+            with self.subTest(dry_run=dry_run):
+                self._assert_screenshot_tamper_rejected(
+                    lambda _run_dir, target: target.unlink(), dry_run=dry_run,
+                )
+
+    def test_finalize_revalidates_before_default_lark_client_construction(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            self._validated(root)
+            run_dir = root / "rec_source"
+            next((run_dir / "screenshots").iterdir()).unlink()
+            with patch(
+                "scripts.workflow.LarkBaseClient",
+                side_effect=AssertionError("Lark client must not be constructed"),
+            ):
+                with self.assertRaisesRegex(WorkflowError, "screenshot evidence is invalid"):
+                    finalize(run_dir, clock=frozen_clock())
+            self.assertFalse((run_dir / "final-results.json").exists())
+
+    def test_finalize_rejects_replaced_symlinked_and_dimension_changed_screenshots(self):
+        def same_size_replacement(_run_dir, target):
+            target.write_bytes(b"x" * target.stat().st_size)
+
+        def symlink_substitution(run_dir, target):
+            outside = run_dir / "outside.png"
+            outside.write_bytes(target.read_bytes())
+            target.unlink()
+            os.symlink(outside, target)
+
+        def changed_dimensions(_run_dir, target):
+            target.write_bytes(complete_png_bytes(999, 800))
+
+        for label, mutate in (
+            ("same-size replacement", same_size_replacement),
+            ("symlink substitution", symlink_substitution),
+            ("changed dimensions", changed_dimensions),
+        ):
+            for dry_run in (True, False):
+                with self.subTest(case=label, dry_run=dry_run):
+                    self._assert_screenshot_tamper_rejected(mutate, dry_run=dry_run)
 
     def _digestless_finalized_one(self, root: Path) -> tuple[Path, Path, Path]:
         """Build a valid pre-digest finalized v2 run with one selected result."""

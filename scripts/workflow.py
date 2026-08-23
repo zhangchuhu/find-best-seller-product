@@ -45,6 +45,7 @@ NEXT_STEP = (
 )
 _DEFAULT_CLOCK = lambda: datetime.now(timezone.utc)
 MAX_EVIDENCE_JSON_BYTES = 5 * 1024 * 1024
+_SCREENSHOT_RECOLLECTION_ERROR = "screenshot-backed evidence must be recollected"
 _DETAIL_KEYS = {
     "identity", "status", "reason", "detail_url", "product_id", "title",
     "category", "sold_display", "reviews_display", "rating_display",
@@ -677,7 +678,6 @@ def _detail_candidate(
     platform: Platform,
     task: Task,
     profile: VisualProfile,
-    allow_legacy_category_reason: bool,
 ) -> tuple[VerifiedCandidate | None, dict[str, object]]:
     if not isinstance(raw, dict) or "evidence_refs" not in raw:
         raise _error("screenshot evidence is invalid")
@@ -697,8 +697,8 @@ def _detail_candidate(
             raise _error("qualified detail cannot have a rejection reason")
     elif not isinstance(reason, str) or reason not in _REJECTION_REASONS:
         raise _error("detail rejection reason is invalid")
-    if reason == "category_mismatch" and not allow_legacy_category_reason:
-        raise _error("category_mismatch is a legacy rejection reason")
+    if reason == "category_mismatch":
+        raise _error(_SCREENSHOT_RECOLLECTION_ERROR)
 
     required_purposes = {
         None: {"visual", "metrics"},
@@ -708,7 +708,6 @@ def _detail_candidate(
         "threshold_failure": {"metrics"},
         "identity_changed": {"access_state"},
         "detail_inaccessible": {"access_state"},
-        "category_mismatch": {"visual"},
     }[reason]
     evidence_refs = detail_value["evidence_refs"]
     if not isinstance(evidence_refs, list):
@@ -1036,12 +1035,10 @@ def _canonical_evidence_payload(
     normalized_details: list[dict[str, object]] = []
     detail_ids: set[str] = set()
     profile = VisualProfile.from_dict(prepared["visual_profile"], task.platform)
-    allow_legacy_category_reason = set(resolved) != {"source", "queries"}
     qualifying_count = 0
     for index, raw_detail in enumerate(details):
         candidate, normalized = _detail_candidate(
             raw_detail, merged, proofs, task.platform, task, profile,
-            allow_legacy_category_reason,
         )
         outcome_identity = normalized["identity"]
         if outcome_identity in detail_ids:
@@ -1141,6 +1138,13 @@ def _validate_evidence_locked(run_dir, input_path, clock=None):
     )
 
 
+def _screenshot_backing_missing(evidence: object) -> bool:
+    return not (
+        isinstance(evidence, Mapping)
+        and {"screenshot_manifest", "screenshot_count"} <= set(evidence)
+    )
+
+
 def _validated_payload(
     checkpoint: Mapping[str, object], run_dir: Path
 ) -> tuple[Task, Path, list[VerifiedCandidate], dict[str, object]]:
@@ -1150,6 +1154,8 @@ def _validated_payload(
         evidence = stages["evidence_validated"]
         if not isinstance(evidence, dict):
             raise ValueError
+        if _screenshot_backing_missing(evidence):
+            raise _error(_SCREENSHOT_RECOLLECTION_ERROR)
         resolved, final_queries = _queries_resolved_payload(
             checkpoint, checkpoint["record_id"], run_dir,
         )
@@ -1195,7 +1201,13 @@ def _validated_payload(
             raise ValueError
         candidates = [VerifiedCandidate.from_dict(item) for item in candidates_raw]
         return task, source, candidates, evidence
-    except (KeyError, TypeError, ValueError, WorkflowError):
+    except WorkflowError as exc:
+        if str(exc) in {
+            "screenshot evidence is invalid", _SCREENSHOT_RECOLLECTION_ERROR,
+        }:
+            raise
+        raise _error("validated checkpoint is invalid") from None
+    except (KeyError, TypeError, ValueError):
         raise _error("validated checkpoint is invalid") from None
 
 
@@ -1211,6 +1223,8 @@ def _migrate_legacy_evidence_digest_locked(
     evidence = stages.get("evidence_validated")
     if not isinstance(evidence, dict) or "evidence_digest" in evidence:
         return checkpoint
+    if _screenshot_backing_missing(evidence):
+        raise _error(_SCREENSHOT_RECOLLECTION_ERROR)
     _task, _source, _candidates, validated = _validated_payload(checkpoint, run_dir)
     resolved, final_queries = _queries_resolved_payload(
         checkpoint, checkpoint["record_id"], run_dir,
@@ -1235,10 +1249,84 @@ def _migrate_legacy_evidence_digest_locked(
     return refreshed
 
 
-def _digestless_v2_finalized_summary(
+def _historical_screenshotless_payload(
+    checkpoint: Mapping[str, object], run_dir: Path,
+) -> tuple[Task, list[VerifiedCandidate], Mapping[str, object]]:
+    """Validate immutable pre-screenshot history without enabling a live replay."""
+    stages = checkpoint["stages"]
+    if not isinstance(stages, Mapping):
+        raise ValueError
+    prepared = _prepared_payload(checkpoint, checkpoint["record_id"], run_dir)
+    evidence = stages["evidence_validated"]
+    if not isinstance(evidence, Mapping) or not _screenshot_backing_missing(evidence):
+        raise ValueError
+    resolved, final_queries = _queries_resolved_payload(
+        checkpoint, checkpoint["record_id"], run_dir,
+    )
+    provenance_key, _expected = _resolution_provenance(resolved, final_queries)
+    core_keys = {
+        provenance_key, "evidence", "candidates",
+        "observation_count", "recurring_count", "detail_count",
+    }
+    allowed = core_keys | {"evidence_digest", "validated_at", "write_progress"}
+    if (
+        not (core_keys | {"validated_at"}) <= set(evidence)
+        or not set(evidence) <= allowed
+    ):
+        raise ValueError
+    for count_key in ("observation_count", "recurring_count", "detail_count"):
+        if type(evidence[count_key]) is not int or evidence[count_key] < 0:
+            raise ValueError
+    root_value = _exact(
+        evidence["evidence"],
+        {"task_record_id", "platform", "queries", "details"},
+        "historical evidence",
+    )
+    if (
+        root_value["task_record_id"] != checkpoint["record_id"]
+        or root_value["platform"] != prepared["task"]["platform"]
+        or not isinstance(root_value["queries"], list)
+        or not isinstance(root_value["details"], list)
+    ):
+        raise ValueError
+    if any(
+        not isinstance(block, Mapping)
+        or not isinstance(block.get("observations"), list)
+        or any(
+            not isinstance(card, Mapping) or "evidence_ref" in card
+            for card in block["observations"]
+        )
+        for block in root_value["queries"]
+    ) or any(
+        not isinstance(detail, Mapping) or "evidence_refs" in detail
+        for detail in root_value["details"]
+    ):
+        raise ValueError
+    _validated_resolution_provenance(
+        evidence, checkpoint, checkpoint["record_id"], run_dir,
+    )
+    digest = evidence.get("evidence_digest")
+    if digest is not None:
+        if (
+            not isinstance(digest, str)
+            or len(digest) != 64
+            or digest != _canonical_evidence_digest({
+                key: evidence[key] for key in core_keys
+            })
+        ):
+            raise ValueError
+    task = Task.from_dict(prepared["task"])
+    candidates_raw = evidence["candidates"]
+    if not isinstance(candidates_raw, list):
+        raise ValueError
+    candidates = [VerifiedCandidate.from_dict(item) for item in candidates_raw]
+    return task, candidates, evidence
+
+
+def _v2_finalized_summary(
     checkpoint: Mapping[str, object], run_dir: Path,
 ) -> str | None:
-    """Read a valid pre-digest v2 completion without mutating it."""
+    """Read a valid v2 completion as immutable history without side effects."""
     if checkpoint.get("version") != 2 or checkpoint.get("stage") != "finalized":
         return None
     try:
@@ -1248,9 +1336,14 @@ def _digestless_v2_finalized_summary(
         evidence = stages["evidence_validated"]
         if not isinstance(evidence, Mapping):
             raise ValueError
-        if "evidence_digest" in evidence:
-            return None
-        task, _source, candidates, validated = _validated_payload(checkpoint, run_dir)
+        if _screenshot_backing_missing(evidence):
+            task, candidates, validated = _historical_screenshotless_payload(
+                checkpoint, run_dir,
+            )
+        else:
+            task, _source, candidates, validated = _validated_payload(
+                checkpoint, run_dir,
+            )
         selected = select_results(task, candidates)
         intended = [
             json.dumps(
@@ -1562,10 +1655,18 @@ def finalize(
         if legacy is not None:
             return legacy
         raise _error("legacy checkpoint requires a restarted analysis")
-    if existing is not None:
-        legacy_v2 = _digestless_v2_finalized_summary(existing, absolute_run)
-        if legacy_v2 is not None:
-            return legacy_v2
+    if existing is not None and existing.get("version") == 2:
+        if existing.get("stage") == "finalized":
+            finalized = _v2_finalized_summary(existing, absolute_run)
+            if finalized is not None:
+                return finalized
+        stages = existing.get("stages")
+        evidence = stages.get("evidence_validated") if isinstance(stages, Mapping) else None
+        if (
+            existing.get("stage") == "evidence_validated"
+            and _screenshot_backing_missing(evidence)
+        ):
+            raise _error(_SCREENSHOT_RECOLLECTION_ERROR)
     arguments = {
         "dry_run": dry_run,
         "lark_client": lark_client,

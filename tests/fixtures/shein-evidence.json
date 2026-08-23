@@ -6,7 +6,7 @@
       "id": "search-1",
       "kind": "search",
       "file": "screenshots/evidence-search-1.png",
-      "sha256": "2ec9f433b1ca00dca25c5cbc5aaea8645e4fedf12ba3aa36c19a474e4b9ab2c6",
+      "sha256": "dc3dbb5747c422ff1aafdc03cd31df676d325d6e2f02e8e4e5e06efdf18bca2e",
       "page_url": "https://us.shein.com/pdsearch/mini%20dress/",
       "query": "mini dress",
       "identity": null
@@ -15,7 +15,7 @@
       "id": "search-2",
       "kind": "search",
       "file": "screenshots/evidence-search-2.png",
-      "sha256": "2ec9f433b1ca00dca25c5cbc5aaea8645e4fedf12ba3aa36c19a474e4b9ab2c6",
+      "sha256": "dc3dbb5747c422ff1aafdc03cd31df676d325d6e2f02e8e4e5e06efdf18bca2e",
       "page_url": "https://us.shein.com/pdsearch/puff%20sleeve%20mini%20dress/",
       "query": "puff sleeve mini dress",
       "identity": null
@@ -24,7 +24,7 @@
       "id": "search-3",
       "kind": "search",
       "file": "screenshots/evidence-search-3.png",
-      "sha256": "2ec9f433b1ca00dca25c5cbc5aaea8645e4fedf12ba3aa36c19a474e4b9ab2c6",
+      "sha256": "dc3dbb5747c422ff1aafdc03cd31df676d325d6e2f02e8e4e5e06efdf18bca2e",
       "page_url": "https://us.shein.com/pdsearch/cocktail%20dress/",
       "query": "cocktail dress",
       "identity": null
@@ -33,7 +33,7 @@
       "id": "detail-1",
       "kind": "detail",
       "file": "screenshots/evidence-detail-1.png",
-      "sha256": "2ec9f433b1ca00dca25c5cbc5aaea8645e4fedf12ba3aa36c19a474e4b9ab2c6",
+      "sha256": "dc3dbb5747c422ff1aafdc03cd31df676d325d6e2f02e8e4e5e06efdf18bca2e",
       "page_url": "https://us.shein.com/red-dress-p-100001.html",
       "query": null,
       "identity": "shein-us:100001"
@@ -42,7 +42,7 @@
       "id": "detail-2",
       "kind": "detail",
       "file": "screenshots/evidence-detail-2.png",
-      "sha256": "2ec9f433b1ca00dca25c5cbc5aaea8645e4fedf12ba3aa36c19a474e4b9ab2c6",
+      "sha256": "dc3dbb5747c422ff1aafdc03cd31df676d325d6e2f02e8e4e5e06efdf18bca2e",
       "page_url": "https://us.shein.com/red-dress-p-100002.html",
       "query": null,
       "identity": "shein-us:100002"

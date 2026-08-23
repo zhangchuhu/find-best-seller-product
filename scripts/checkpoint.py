@@ -19,11 +19,9 @@ _LEGACY_V1_STAGES = ("prepared", "evidence_validated", "finalized")
 
 _RECORD_ID = re.compile(r"rec[A-Za-z0-9_-]+", re.ASCII)
 _ENVELOPE_KEYS = frozenset({"record_id", "stage", "stages", "version"})
-_LEGACY_EVIDENCE_SHARED_CORE_KEYS = frozenset({
+_EVIDENCE_SHARED_CORE_KEYS = frozenset({
     "evidence", "candidates",
     "observation_count", "recurring_count", "detail_count", "evidence_digest",
-})
-_EVIDENCE_SHARED_CORE_KEYS = _LEGACY_EVIDENCE_SHARED_CORE_KEYS | frozenset({
     "screenshot_manifest", "screenshot_count",
 })
 _FORBIDDEN_KEYS = (
@@ -224,16 +222,12 @@ def _evidence_core_keys(value: Mapping[str, object]) -> frozenset[str] | None:
     """Recognize one immutable evidence provenance layout at a time."""
     keys = set(value)
     screenshot_keys = {"screenshot_manifest", "screenshot_count"}
-    if screenshot_keys <= keys:
-        shared = _EVIDENCE_SHARED_CORE_KEYS
-    elif not screenshot_keys & keys:
-        shared = _LEGACY_EVIDENCE_SHARED_CORE_KEYS
-    else:
+    if not screenshot_keys <= keys:
         return None
     if "autocomplete_provenance" in keys and "query_provenance" not in keys:
-        return shared | frozenset({"autocomplete_provenance"})
+        return _EVIDENCE_SHARED_CORE_KEYS | frozenset({"autocomplete_provenance"})
     if "query_provenance" in keys and "autocomplete_provenance" not in keys:
-        return shared | frozenset({"query_provenance"})
+        return _EVIDENCE_SHARED_CORE_KEYS | frozenset({"query_provenance"})
     return None
 
 

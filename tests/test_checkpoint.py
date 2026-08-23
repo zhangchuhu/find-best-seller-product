@@ -83,6 +83,8 @@ class CheckpointBehaviorTests(unittest.TestCase):
             "observation_count": 90,
             "recurring_count": 2,
             "detail_count": 2,
+            "screenshot_manifest": [{"id": "proof-1"}],
+            "screenshot_count": 1,
             "evidence_digest": "a" * 64,
         }
         initial = {**core, "validated_at": "2026-08-21T10:00:00Z"}
@@ -114,6 +116,8 @@ class CheckpointBehaviorTests(unittest.TestCase):
             "observation_count": 90,
             "recurring_count": 2,
             "detail_count": 2,
+            "screenshot_manifest": [{"id": "proof-1"}],
+            "screenshot_count": 1,
             "evidence_digest": "a" * 64,
         }
         self.store.save_stage(
@@ -127,6 +131,33 @@ class CheckpointBehaviorTests(unittest.TestCase):
                 "validated_at": "2026-08-21T10:01:00Z",
             },
         )
+
+    def test_screenshotless_evidence_core_is_immutable(self) -> None:
+        self.store.save_stage("recLegacyEvidence1", "prepared", {"prepared": True})
+        self.store.save_stage(
+            "recLegacyEvidence1", "queries_resolved",
+            {"source": "ark_seeds", "queries": ["one", "two", "three"]},
+        )
+        screenshotless = {
+            "query_provenance": {
+                "source": "ark_seeds", "queries": ["one", "two", "three"],
+            },
+            "evidence": {"queries": []},
+            "candidates": [],
+            "observation_count": 90,
+            "recurring_count": 2,
+            "detail_count": 2,
+            "evidence_digest": "a" * 64,
+            "validated_at": "2026-08-21T10:00:00Z",
+        }
+        self.store.save_stage(
+            "recLegacyEvidence1", "evidence_validated", screenshotless,
+        )
+        with self.assertRaisesRegex(CheckpointError, "immutable"):
+            self.store.save_stage(
+                "recLegacyEvidence1", "evidence_validated",
+                {**screenshotless, "validated_at": "2026-08-21T10:01:00Z"},
+            )
 
     def test_legacy_v1_is_read_only_only_after_the_exact_legacy_finalized_prefix(self) -> None:
         record_id = "recLegacy1"
