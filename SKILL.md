@@ -5,7 +5,7 @@ description: Use when processing Feishu Base fashion research tasks that require
 
 # Find Best Seller Product
 
-Process one selected Feishu research record through a resumable, evidence-first workflow. Prerequisites are signed-in `lark-cli`, selected Chrome, and Ark configuration. `ARK_API_KEY` and `ARK_VISION_MODEL` must be environment-only; optionally set `ARK_VISION_TIMEOUT_SECONDS` to a positive finite number of seconds (default `300`). Never log credentials, image data, or model responses.
+Prerequisites are signed-in `lark-cli`, selected Chrome, and Ark configuration. `ARK_API_KEY` and `ARK_VISION_MODEL` must be environment-only; optionally set `ARK_VISION_TIMEOUT_SECONDS` to a positive finite number of seconds (default `300`). Never log credentials, image data, or model responses.
 
 Read [the Base contract](references/base-contract.md), [Ark profile](references/ark-vision.md), and [product evidence](references/browser-evidence.md). Use [Mercado rules](references/mercado-libre.md) or [SHEIN rules](references/shein.md). Unsupported platforms are rejected.
 
@@ -20,9 +20,11 @@ The first real run uses one selected record and `--dry-run`.
 
 A product must recur in at least two distinct query sets. Follow the product-evidence contract for card/detail fields, ordered outcomes, thresholds, and result features. Colors/sizes visible in titles, cards, or details may remain only in verbatim source fields; they must not enter queries, `match_level`, `visual_features`, qualification/rejection, recurrence/ranking, or result visual text.
 
-SHEIN requires unambiguous review count and rating displays that pass their task thresholds; sold count is optional and never filters or ranks a SHEIN candidate. Mercado Libre requires an unambiguous product sold display that passes the task sold threshold; review count and rating are optional and never filter or rank a Mercado candidate. Preserve optional metric displays when visible and write an empty Result Base text value when absent.
+Treat platform category text as audit-only. Compare source and candidate imagery by silhouette, construction, and defining garment parts; reject a visual category contradiction as `visual_structure_mismatch`.
 
-For CAPTCHA, login, authentication, or region walls, pause and preserve the checkpoint; ask the user to resolve it in selected Chrome. Follow the product-evidence contract's untrusted-page, session-data, and task-tab boundaries.
+SHEIN requires unambiguous review count and rating displays that pass their task thresholds; sold count is optional and never filters or ranks a SHEIN candidate. Mercado Libre requires an unambiguous product sold display that passes the task sold threshold; review count and rating are optional and never filter or rank a Mercado candidate.
+
+For CAPTCHA, login, authentication, or region walls, pause and preserve the checkpoint; ask the user to resolve it in selected Chrome. Before SHEIN collection or resume, follow the product-evidence task-tab cleanup and three-round retry protocol.
 
 Reject a broken or unverifiable candidate and continue until the result limit is met or the recurring pool is exhausted. If fewer than `结果数量` qualify, write the verified subset; only zero qualifying candidates write zero rows. Dry-run mutates neither Base nor `任务状态`.
 

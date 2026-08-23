@@ -46,6 +46,7 @@ _DETAIL_KEYS = {
 }
 _REJECTION_REASONS = {
     "category_mismatch",
+    "visual_structure_mismatch",
     "imagery_ambiguous_or_inaccessible",
     "metric_missing_or_ambiguous",
     "threshold_failure",
@@ -666,6 +667,7 @@ def _detail_candidate(
     platform: Platform,
     task: Task,
     profile: VisualProfile,
+    allow_legacy_category_reason: bool,
 ) -> tuple[VerifiedCandidate | None, dict[str, object]]:
     detail = _exact(raw, _DETAIL_KEYS, "detail")
     identity = detail["identity"]
@@ -682,6 +684,8 @@ def _detail_candidate(
             raise _error("qualified detail cannot have a rejection reason")
     elif not isinstance(reason, str) or reason not in _REJECTION_REASONS:
         raise _error("detail rejection reason is invalid")
+    if reason == "category_mismatch" and not allow_legacy_category_reason:
+        raise _error("category_mismatch is a legacy rejection reason")
 
     detail_url = detail["detail_url"]
     explicit_id = detail["product_id"]
@@ -743,20 +747,15 @@ def _detail_candidate(
         "visual_features": features,
     }
 
-    normalize_category = lambda value: " ".join(value.casefold().split())
-    accepted_categories = {
-        normalize_category(profile.category), normalize_category(profile.subtype)
-    }
-    category_matches = (
-        category is not None and normalize_category(category) in accepted_categories
-    )
-
     if status_value == "rejected":
         if detail["match_level"] is not None or detail["visual_features"] is not None:
             raise _error("rejected detail cannot contain match evidence")
-        if reason in {"category_mismatch", "metric_missing_or_ambiguous", "threshold_failure"}:
+        if reason == "category_mismatch":
             if normalized_url is None or title is None or category is None:
-                raise _error("detail rejection reason requires visible detail identity title and category")
+                raise _error("legacy category rejection requires visible detail identity title and category")
+        if reason in {"visual_structure_mismatch", "metric_missing_or_ambiguous", "threshold_failure"}:
+            if normalized_url is None or title is None:
+                raise _error("detail rejection reason requires visible detail identity and title")
         if reason == "imagery_ambiguous_or_inaccessible" and normalized_url is None:
             raise _error("imagery rejection requires a detail URL")
         if reason == "threshold_failure" and any(value is None for _, value, _ in required_metrics):
@@ -770,10 +769,6 @@ def _detail_candidate(
             value is not None for _, value, _ in required_metrics
         ):
             raise _error("metric rejection must identify a missing metric")
-        if reason == "category_mismatch" and category_matches:
-            raise _error("category rejection requires a mismatched source category")
-        if reason not in {"category_mismatch", "detail_inaccessible"} and category is not None and not category_matches:
-            raise _error("detail rejection reason conflicts with the visible category")
         if reason == "identity_changed" and normalized_url is None:
             raise _error("identity rejection requires detail identity evidence")
         if reason == "identity_changed" and not identity_changed:
@@ -790,10 +785,8 @@ def _detail_candidate(
             raise _error("inaccessible detail cannot claim visible detail evidence")
         return None, normalized
 
-    if normalized_url is None or title is None or category is None:
-        raise _error("qualified detail identity title and category are required")
-    if not category_matches:
-        raise _error("qualified detail category does not match the source profile")
+    if normalized_url is None or title is None:
+        raise _error("qualified detail identity and title are required")
     if any(value is None for _, value, _ in required_metrics):
         raise _error("qualified detail metrics are missing or ambiguous")
     if any(
@@ -956,10 +949,12 @@ def _canonical_evidence_payload(
     normalized_details: list[dict[str, object]] = []
     detail_ids: set[str] = set()
     profile = VisualProfile.from_dict(prepared["visual_profile"], task.platform)
+    allow_legacy_category_reason = set(resolved) != {"source", "queries"}
     qualifying_count = 0
     for index, raw_detail in enumerate(details):
         candidate, normalized = _detail_candidate(
-            raw_detail, merged, task.platform, task, profile
+            raw_detail, merged, task.platform, task, profile,
+            allow_legacy_category_reason,
         )
         outcome_identity = normalized["identity"]
         if outcome_identity in detail_ids:

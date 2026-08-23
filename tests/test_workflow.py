@@ -679,7 +679,6 @@ class EvidenceTests(unittest.TestCase):
             "unrelated url": lambda detail: detail.update({"detail_url": "https://us.shein.com/other-p-999999.html", "product_id": "999999"}),
             "url id conflict": lambda detail: detail.update({"product_id": "999999"}),
             "search title reused": lambda detail: detail.update({"title": ""}),
-            "unrelated category": lambda detail: detail.update({"category": "shoes"}),
         }
         for label, mutate in mutations.items():
             with self.subTest(case=label), tempfile.TemporaryDirectory() as directory:
@@ -691,6 +690,62 @@ class EvidenceTests(unittest.TestCase):
                 path.write_text(json.dumps(value), encoding="utf-8")
                 with self.assertRaises(WorkflowError):
                     validate_evidence(root / "rec_source", path, clock=frozen_clock())
+
+    def test_visible_category_text_does_not_gate_a_qualified_visual_match(self):
+        for label, category in (
+            ("different marketplace taxonomy", "Women > Clothing > Occasion Wear"),
+            ("category unavailable", None),
+        ):
+            with self.subTest(case=label), tempfile.TemporaryDirectory() as directory:
+                root = Path(directory)
+                prepare_run(root)
+                value = load_fixture("shein-evidence.json")
+                value["details"][0]["category"] = category
+                path = root / "visual-match.json"
+                path.write_text(json.dumps(value), encoding="utf-8")
+
+                validate_evidence(root / "rec_source", path, clock=frozen_clock())
+
+                candidates = CheckpointStore(root).load("rec_source")["stages"]["evidence_validated"]["candidates"]
+                self.assertEqual(2, len(candidates))
+
+    def test_visual_structure_mismatch_rejects_even_when_category_text_matches(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            prepare_run(root)
+            value = load_fixture("shein-evidence.json")
+            value["details"][0].update({
+                "status": "rejected",
+                "reason": "visual_structure_mismatch",
+                "category": "mini dress",
+                "match_level": None,
+                "visual_features": None,
+            })
+            path = root / "visual-mismatch.json"
+            path.write_text(json.dumps(value), encoding="utf-8")
+
+            validate_evidence(root / "rec_source", path, clock=frozen_clock())
+
+            candidates = CheckpointStore(root).load("rec_source")["stages"]["evidence_validated"]["candidates"]
+            self.assertEqual(1, len(candidates))
+
+    def test_new_direct_evidence_cannot_use_the_legacy_category_text_reason(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            prepare_run(root)
+            value = load_fixture("shein-evidence.json")
+            value["details"][0].update({
+                "status": "rejected",
+                "reason": "category_mismatch",
+                "category": "shoes",
+                "match_level": None,
+                "visual_features": None,
+            })
+            path = root / "legacy-category-reason.json"
+            path.write_text(json.dumps(value), encoding="utf-8")
+
+            with self.assertRaisesRegex(WorkflowError, "legacy"):
+                validate_evidence(root / "rec_source", path, clock=frozen_clock())
 
     def test_exhaustive_rejected_outcomes_allow_a_complete_zero_result(self):
         with tempfile.TemporaryDirectory() as directory:
@@ -774,20 +829,14 @@ class EvidenceTests(unittest.TestCase):
                 with self.assertRaises(WorkflowError):
                     validate_evidence(root / "rec_source", path, clock=frozen_clock())
 
-    def test_rejection_reasons_must_describe_a_real_threshold_or_category_failure(self):
+    def test_rejection_reasons_must_describe_a_real_threshold_failure(self):
         def false_threshold(detail):
             detail.update({
                 "status": "rejected", "reason": "threshold_failure",
                 "match_level": None, "visual_features": None,
             })
 
-        def false_category(detail):
-            detail.update({
-                "status": "rejected", "reason": "category_mismatch",
-                "match_level": None, "visual_features": None,
-            })
-
-        def threshold_hiding_category_drift(detail):
+        def threshold_using_irrelevant_sold_count(detail):
             detail.update({
                 "status": "rejected", "reason": "threshold_failure",
                 "category": "shoes", "sold_display": "1 sold",
@@ -796,8 +845,7 @@ class EvidenceTests(unittest.TestCase):
 
         for label, mutate in (
             ("passing metrics called threshold failure", false_threshold),
-            ("matching category called mismatch", false_category),
-            ("threshold reason hides category drift", threshold_hiding_category_drift),
+            ("irrelevant sold count called threshold failure", threshold_using_irrelevant_sold_count),
         ):
             with self.subTest(case=label), tempfile.TemporaryDirectory() as directory:
                 root = Path(directory)

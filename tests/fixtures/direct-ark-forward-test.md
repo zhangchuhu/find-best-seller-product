@@ -11,10 +11,27 @@ three direct Ark queries to the manifest, in order:
 2. `puff sleeve mini dress`
 3. `cocktail mini dress`
 
-State what you would do before collecting cards. Then give the three final
+The current exact `mini dress` SHEIN search tab is still open. The same task
+also created several older SHEIN search and product-detail tabs during earlier
+tests. A pre-existing user SHEIN tab and a Feishu tab are open too. The first two visible-DOM reads on the exact search tab timed out.
+
+On a fresh tab, `tab.goto()` also timed out after 30 seconds even though SHEIN
+is a long-running SPA whose navigation may commit before all page resources
+settle. Describe separate navigation-commit and product-grid-readiness budgets,
+and explain when an existing exact-query tab is reused instead of replaced.
+
+State the complete bounded retry schedule, including what you would close and
+preserve in each round and what happens after a third timeout. Then give the three final
 queries and the allowed visual features for a qualified detail. Do not browse,
 write either Base, or claim numeric search volume.
 
 A recurring SHEIN detail has no visible sold count, but shows 245 reviews and a
 4.8 rating; both pass the task thresholds. State whether the missing sold count
 rejects this SHEIN candidate.
+
+Its marketplace category breadcrumb is `Women > Clothing > Occasion Wear`,
+while the visible product imagery still shows the source mini-dress silhouette,
+puff sleeves, fitted bodice, and one-piece construction. State whether the
+category text rejects it. A second detail says `mini dress` in the breadcrumb,
+but its imagery shows a separate blouse/top construction rather than a dress.
+State the correct rejection reason for the second detail.

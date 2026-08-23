@@ -17,8 +17,8 @@ not make the state visible, reject/stop the card rather than recording it. Ident
 `MLM` product identifier when encoded in the URL. An explicit ID must normalize
 to the same `MLM` identity as the URL; reject an identity change between search
 card and detail page. A qualified outcome preserves the canonical detail URL,
-explicit ID when visible, visible detail title, and visible detail garment
-category. The result title comes from the detail page, never the search card.
+explicit ID when visible, visible detail title, and raw category text when
+visible. The result title comes from the detail page, never the search card.
 
 ## Detail metrics
 
@@ -32,5 +32,7 @@ Reject an ambiguous required sold metric rather than estimating it.
 
 Search-result card metrics cannot replace detail-page verification. A missing required metric rejects the candidate. Do not use seller totals or followers,
 review count as sold count, a badge-only `MÁS VENDIDO`, or any other proxy.
-Also reject category drift, identity change, inaccessible imagery, and garments
-whose visible construction contradicts the source profile.
+Also reject identity change, inaccessible imagery, and a visual structure
+mismatch where the garment's silhouette, construction, or defining parts
+contradict the source profile. Category or breadcrumb wording is audit evidence
+only and never overrides the image-based judgment.
