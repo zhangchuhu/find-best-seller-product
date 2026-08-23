@@ -10,6 +10,7 @@ import re
 import stat
 from typing import Mapping
 from urllib.parse import urlsplit
+import zlib
 
 from .platforms import Platform, route_platform
 
@@ -284,11 +285,42 @@ def _image_metadata(header: bytes) -> tuple[str, int, int]:
 
 
 def _png_metadata(header: bytes) -> tuple[str, int, int]:
-    if len(header) < 24 or header[12:16] != b"IHDR":
+    if len(header) < 8:
         raise ScreenshotEvidenceError("screenshot format is invalid")
-    if int.from_bytes(header[8:12], "big") != 13:
-        raise ScreenshotEvidenceError("screenshot format is invalid")
-    return "image/png", int.from_bytes(header[16:20], "big"), int.from_bytes(header[20:24], "big")
+    offset = 8
+    dimensions: tuple[int, int] | None = None
+    has_idat = False
+    while offset < len(header):
+        if offset + 12 > len(header):
+            raise ScreenshotEvidenceError("screenshot format is invalid")
+        chunk_length = int.from_bytes(header[offset:offset + 4], "big")
+        chunk_type = header[offset + 4:offset + 8]
+        data_start = offset + 8
+        data_end = data_start + chunk_length
+        chunk_end = data_end + 4
+        if chunk_end > len(header):
+            raise ScreenshotEvidenceError("screenshot format is invalid")
+        chunk_data = header[data_start:data_end]
+        declared_crc = int.from_bytes(header[data_end:chunk_end], "big")
+        if zlib.crc32(chunk_type + chunk_data) & 0xFFFFFFFF != declared_crc:
+            raise ScreenshotEvidenceError("screenshot format is invalid")
+        if dimensions is None:
+            if chunk_type != b"IHDR" or chunk_length != 13:
+                raise ScreenshotEvidenceError("screenshot format is invalid")
+            dimensions = (
+                int.from_bytes(chunk_data[:4], "big"),
+                int.from_bytes(chunk_data[4:8], "big"),
+            )
+        elif chunk_type == b"IHDR":
+            raise ScreenshotEvidenceError("screenshot format is invalid")
+        if chunk_type == b"IDAT":
+            has_idat = True
+        if chunk_type == b"IEND":
+            if chunk_length != 0 or not has_idat or chunk_end != len(header):
+                raise ScreenshotEvidenceError("screenshot format is invalid")
+            return "image/png", *dimensions
+        offset = chunk_end
+    raise ScreenshotEvidenceError("screenshot format is invalid")
 
 
 def _jpeg_metadata(header: bytes) -> tuple[str, int, int]:
@@ -316,29 +348,64 @@ def _jpeg_metadata(header: bytes) -> tuple[str, int, int]:
                 raise ScreenshotEvidenceError("screenshot format is invalid")
             height = int.from_bytes(header[offset + 3:offset + 5], "big")
             width = int.from_bytes(header[offset + 5:offset + 7], "big")
+            component_count = header[offset + 7]
+            if component_count == 0 or segment_length != 8 + 3 * component_count:
+                raise ScreenshotEvidenceError("screenshot format is invalid")
+            components = header[offset + 8:offset + segment_length]
+            component_ids = components[::3]
+            sampling = components[1::3]
+            quantization_tables = components[2::3]
+            if (
+                len(set(component_ids)) != component_count
+                or 0 in component_ids
+                or any((value >> 4) not in range(1, 5) or (value & 0x0F) not in range(1, 5) for value in sampling)
+                or any(value > 3 for value in quantization_tables)
+            ):
+                raise ScreenshotEvidenceError("screenshot format is invalid")
             return "image/jpeg", width, height
         offset += segment_length
     raise ScreenshotEvidenceError("screenshot format is invalid")
 
 
 def _webp_metadata(header: bytes) -> tuple[str, int, int]:
-    if len(header) < 16:
+    if len(header) < 12 or int.from_bytes(header[4:8], "little") + 8 != len(header):
         raise ScreenshotEvidenceError("screenshot format is invalid")
-    chunk_type = header[12:16]
+    offset = 12
+    metadata: tuple[str, int, int] | None = None
+    while offset < len(header):
+        if offset + 8 > len(header):
+            raise ScreenshotEvidenceError("screenshot format is invalid")
+        chunk_type = header[offset:offset + 4]
+        chunk_length = int.from_bytes(header[offset + 4:offset + 8], "little")
+        data_start = offset + 8
+        data_end = data_start + chunk_length
+        next_offset = data_end + (chunk_length % 2)
+        if next_offset > len(header):
+            raise ScreenshotEvidenceError("screenshot format is invalid")
+        if chunk_type in {b"VP8X", b"VP8 ", b"VP8L"} and metadata is None:
+            metadata = _webp_chunk_metadata(chunk_type, header[data_start:data_end])
+        offset = next_offset
+    if offset != len(header) or metadata is None:
+        raise ScreenshotEvidenceError("screenshot format is invalid")
+    return metadata
+
+
+def _webp_chunk_metadata(chunk_type: bytes, data: bytes) -> tuple[str, int, int]:
+    chunk_length = len(data)
     if chunk_type == b"VP8X":
-        if len(header) < 30 or int.from_bytes(header[16:20], "little") < 10:
+        if chunk_length != 10:
             raise ScreenshotEvidenceError("screenshot format is invalid")
-        width = int.from_bytes(header[24:27], "little") + 1
-        height = int.from_bytes(header[27:30], "little") + 1
+        width = int.from_bytes(data[4:7], "little") + 1
+        height = int.from_bytes(data[7:10], "little") + 1
     elif chunk_type == b"VP8 ":
-        if len(header) < 30 or int.from_bytes(header[16:20], "little") < 10 or header[23:26] != b"\x9d\x01\x2a":
+        if chunk_length < 10 or data[3:6] != b"\x9d\x01\x2a":
             raise ScreenshotEvidenceError("screenshot format is invalid")
-        width = int.from_bytes(header[26:28], "little") & 0x3FFF
-        height = int.from_bytes(header[28:30], "little") & 0x3FFF
+        width = int.from_bytes(data[6:8], "little") & 0x3FFF
+        height = int.from_bytes(data[8:10], "little") & 0x3FFF
     elif chunk_type == b"VP8L":
-        if len(header) < 25 or int.from_bytes(header[16:20], "little") < 5 or header[20] != 0x2F:
+        if chunk_length < 5 or data[0] != 0x2F:
             raise ScreenshotEvidenceError("screenshot format is invalid")
-        bits = int.from_bytes(header[21:25], "little")
+        bits = int.from_bytes(data[1:5], "little")
         width = (bits & 0x3FFF) + 1
         height = ((bits >> 14) & 0x3FFF) + 1
     else:

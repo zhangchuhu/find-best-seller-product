@@ -19,20 +19,28 @@ from scripts.screenshot_evidence import (
 )
 
 
+def png_chunk(kind: bytes, data: bytes) -> bytes:
+    checksum = zlib.crc32(kind + data) & 0xFFFFFFFF
+    return struct.pack(">I", len(data)) + kind + data + struct.pack(">I", checksum)
+
+
 def png_bytes(width: int = 1000, height: int = 800) -> bytes:
     signature = b"\x89PNG\r\n\x1a\n"
     ihdr_data = struct.pack(">IIBBBBB", width, height, 8, 6, 0, 0, 0)
-
-    def chunk(kind: bytes, data: bytes) -> bytes:
-        checksum = zlib.crc32(kind + data) & 0xFFFFFFFF
-        return struct.pack(">I", len(data)) + kind + data + struct.pack(">I", checksum)
-
     return (
         signature
-        + chunk(b"IHDR", ihdr_data)
-        + chunk(b"IDAT", zlib.compress(b"\x00" + b"\x00\x00\x00\x00" * width))
-        + chunk(b"IEND", b"")
+        + png_chunk(b"IHDR", ihdr_data)
+        + png_chunk(b"IDAT", zlib.compress(b"\x00" + b"\x00\x00\x00\x00" * width))
+        + png_chunk(b"IEND", b"")
     )
+
+
+def png_with_byte_size(byte_size: int) -> bytes:
+    signature = b"\x89PNG\r\n\x1a\n"
+    ihdr = png_chunk(b"IHDR", struct.pack(">IIBBBBB", 1, 1, 8, 6, 0, 0, 0))
+    iend = png_chunk(b"IEND", b"")
+    idat_data = b"\x00" * (byte_size - len(signature) - len(ihdr) - len(iend) - 12)
+    return signature + ihdr + png_chunk(b"IDAT", idat_data) + iend
 
 
 def write_search_png(run_dir: Path, name: str = "query-1.png") -> tuple[Path, str]:
@@ -44,7 +52,9 @@ def write_search_png(run_dir: Path, name: str = "query-1.png") -> tuple[Path, st
 
 
 def jpeg_bytes(width: int = 1000, height: int = 800) -> bytes:
-    return b"\xff\xd8\xff\xc0\x00\x08\x08" + struct.pack(">HH", height, width) + b"\x01\xff\xd9"
+    components = b"\x01\x11\x00\x02\x11\x01\x03\x11\x01"
+    length = 8 + len(components)
+    return b"\xff\xd8\xff\xc0" + struct.pack(">H", length) + b"\x08" + struct.pack(">HH", height, width) + b"\x03" + components + b"\xff\xd9"
 
 
 def webp_vp8x_bytes(width: int = 1000, height: int = 800) -> bytes:
@@ -139,10 +149,21 @@ class ScreenshotRegistryTests(unittest.TestCase):
                 self.assertEqual([321, 654], [manifest[0]["width"], manifest[0]["height"]])
 
     def test_registry_rejects_malformed_or_truncated_image_headers(self) -> None:
+        dimensions = struct.pack(">II", 321, 654)
+        incomplete_ihdr = b"\x89PNG\r\n\x1a\n" + struct.pack(">I", 13) + b"IHDR" + dimensions
+        ihdr_without_image = b"\x89PNG\r\n\x1a\n" + png_chunk(
+            b"IHDR", dimensions + b"\x08\x06\x00\x00\x00",
+        )
+        malformed_sof = b"\xff\xd8\xff\xc0\x00\x08\x08" + struct.pack(">HH", 654, 321) + b"\x01\xff\xd9"
+        valid_webp = webp_vp8x_bytes(321, 654)
+        declared_overlong_chunk = valid_webp[:16] + (11).to_bytes(4, "little") + valid_webp[20:]
+        inconsistent_riff_size = valid_webp[:4] + (len(valid_webp) - 7).to_bytes(4, "little") + valid_webp[8:]
         cases = (
-            ("png", b"\x89PNG\r\n\x1a\n\x00\x00"),
-            ("jpeg", b"\xff\xd8\xff\xc0\x00\x08"),
-            ("webp", b"RIFF\x00\x00\x00\x00WEBPVP8X"),
+            ("png-incomplete-ihdr", incomplete_ihdr),
+            ("png-without-image", ihdr_without_image),
+            ("jpeg-missing-component-specification", malformed_sof),
+            ("webp-overlong-chunk", declared_overlong_chunk),
+            ("webp-inconsistent-riff-size", inconsistent_riff_size),
         )
         for name, content in cases:
             with self.subTest(name=name):
@@ -235,8 +256,7 @@ class ScreenshotRegistryTests(unittest.TestCase):
                 [search_descriptor("oversized.png", oversized_digest)], self.run_dir, Platform.SHEIN_US,
                 ("mini dress", "puff sleeve mini dress", "cocktail dress"),
             )
-        chunk = png_bytes()
-        chunk += b"\x00" * (8 * 1024 * 1024 - len(chunk))
+        chunk = png_with_byte_size(8 * 1024 * 1024)
         descriptors = []
         for index in range(16):
             name = f"total-{index}.png"
