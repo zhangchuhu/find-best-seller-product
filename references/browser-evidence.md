@@ -51,16 +51,14 @@ A navigation-stage or readiness-stage budget expiry fails that round. After
 round 1 times out, wait 10 seconds; after round 2 times out, wait 15 seconds.
 Then begin the next round from a fresh `chrome.tabs.list()` result.
 
-After round 3 times out, preserve the checkpoint and ask the user to reconnect
-Chrome. Never start a fourth round or switch browsers.
-
-For SHEIN only, a completed third bounded visible-DOM failure may continue through
-the bundled local collector instead of a fourth DOM round. Preserve the checkpoint,
-tell the user that manual installation is required, and wait for the user to load
+After round 3 times out, preserve the checkpoint and never start a fourth DOM round.
+Never start a fourth round or switch browsers. If this is SHEIN and the restricted
+local collector is available and permitted, ask the user to manually load
 `chrome-extension/shein-evidence-collector` in the same Chrome profile. Then use
 the collector on the explicitly selected `us.shein.com` tab with the exact manifest
-queries. This is not permission to use another browser, a hidden browser, network
-interception, private APIs, or the collector on Mercado Libre.
+queries. Otherwise, ask the user to reconnect Chrome. The collector and reconnect
+branches are exclusive. Neither branch permits another browser, a hidden browser,
+network interception, private APIs, or the collector on Mercado Libre.
 
 ## Local SHEIN collector installation and export
 

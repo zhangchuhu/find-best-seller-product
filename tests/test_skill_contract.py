@@ -51,8 +51,13 @@ class SkillContractTests(unittest.TestCase):
         self.assertEqual(
             {"display_name", "short_description", "default_prompt"}, set(parsed)
         )
+        self.assertGreaterEqual(len(parsed["short_description"]), 25)
+        self.assertLessEqual(len(parsed["short_description"]), 64)
         for term in ("飞书", "Ark Vision", "Chrome", "写回"):
             self.assertIn(term, parsed["default_prompt"])
+        self.assertIn("$find-best-seller-product", parsed["default_prompt"])
+        self.assertIn("SHEIN 的三轮 Chrome 重试仍失败后", parsed["default_prompt"])
+        self.assertNotIn("Chrome 或本地 SHEIN 采集器", parsed["default_prompt"])
 
     def test_entrypoint_routes_current_references_and_searches_direct_ark_queries(self):
         text = read("SKILL.md")
@@ -129,7 +134,6 @@ class SkillContractTests(unittest.TestCase):
             "After round 1 times out, wait 10 seconds",
             "after round 2 times out, wait 15 seconds",
             "Every round re-enumerates task-created tabs",
-            "After round 3 times out, preserve the checkpoint and ask the user to reconnect Chrome",
             "Never start a fourth round or switch browsers",
             "navigation commitment has a 100-second budget",
             "`tab.playwright.waitForURL`",
@@ -379,6 +383,22 @@ class SkillContractTests(unittest.TestCase):
         for clause in ("截图留证", "本地 SHEIN 采集器"):
             with self.subTest(scope="metadata", clause=clause):
                 self.assertIn(clause, metadata)
+
+    def test_third_dom_failure_has_exclusive_collector_or_reconnect_branches(self):
+        browser = " ".join(read("references/browser-evidence.md").split())
+        for clause in (
+            "After round 3 times out, preserve the checkpoint and never start a fourth DOM round",
+            "If this is SHEIN and the restricted local collector is available and permitted",
+            "ask the user to manually load `chrome-extension/shein-evidence-collector`",
+            "Otherwise, ask the user to reconnect Chrome",
+            "The collector and reconnect branches are exclusive",
+        ):
+            with self.subTest(clause=clause):
+                self.assertIn(clause, browser)
+        self.assertNotIn(
+            "After round 3 times out, preserve the checkpoint and ask the user to reconnect Chrome",
+            browser,
+        )
 
     def test_autocomplete_module_is_explicitly_legacy_only(self):
         text = read("scripts/autocomplete.py")
