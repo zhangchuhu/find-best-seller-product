@@ -3,6 +3,7 @@ from __future__ import annotations
 import copy
 from dataclasses import replace
 from datetime import datetime, timedelta, timezone
+import hashlib
 import json
 import multiprocessing
 import os
@@ -34,6 +35,12 @@ from scripts.workflow import (
 
 ROOT = Path(__file__).resolve().parents[1]
 FIXTURES = ROOT / "tests" / "fixtures"
+SCREENSHOT_PNG = bytes.fromhex(
+    "89504e470d0a1a0a0000000d49484452000003e8000003200806000000b018483d"
+    "0000001b49444154789cedc13101000000c2a0f54f6d0c1fa000000080bb010fa1"
+    "0001d9a128800000000049454e44ae426082"
+)
+SCREENSHOT_SHA256 = "2ec9f433b1ca00dca25c5cbc5aaea8645e4fedf12ba3aa36c19a474e4b9ab2c6"
 
 
 def task(platform: Platform = Platform.SHEIN_US, limit: int = 2) -> Task:
@@ -188,38 +195,52 @@ def frozen_clock(value="2026-08-21T10:00:00+00:00"):
 
 
 def load_fixture(name: str) -> dict[str, object]:
-    value = json.loads((FIXTURES / name).read_text(encoding="utf-8"))
-    # Product-card fixtures predate autocomplete and low-value-feature
-    # exclusion. Keep identities and metrics, but bind query/feature evidence
-    # to the current durable contracts.
-    replacements = {
-        "red fitted bow dress": "mini dress",
-        "red dress puff sleeves": "puff sleeve mini dress",
-        "red dress bow detail": "cocktail dress",
-        "vestido ajustado con moño": "vestido",
-        "vestido con mangas abullonadas": "vestido manga abullonada",
-        "vestido detalle moño": "vestido cóctel",
-    }
-    if isinstance(value, dict) and isinstance(value.get("queries"), list):
-        for block in value["queries"]:
-            if isinstance(block, dict):
-                block["query"] = replacements.get(block.get("query"), block.get("query"))
-                for observation in block.get("observations", []):
-                    if isinstance(observation, dict):
-                        observation["query"] = replacements.get(observation.get("query"), observation.get("query"))
-    if isinstance(value, dict) and isinstance(value.get("details"), list):
-        for detail in value["details"]:
-            if isinstance(detail, dict) and isinstance(detail.get("visual_features"), list):
-                detail["visual_features"] = [
-                    feature for feature in detail["visual_features"] if feature != "red"
-                ]
+    return json.loads((FIXTURES / name).read_text(encoding="utf-8"))
+
+
+def attach_screenshot_proof(value: dict[str, object], run_dir: Path) -> None:
+    """Materialize only the deterministic screenshots declared by a fixture."""
+    screenshots = value.get("screenshots")
+    if not isinstance(screenshots, list):
+        return
+    if hashlib.sha256(SCREENSHOT_PNG).hexdigest() != SCREENSHOT_SHA256:
+        raise AssertionError("deterministic screenshot digest changed")
+    screenshot_dir = run_dir / "screenshots"
+    screenshot_dir.mkdir(parents=True, exist_ok=True)
+    for descriptor in screenshots:
+        if not isinstance(descriptor, dict):
+            raise AssertionError("fixture screenshot descriptor is invalid")
+        relative_path = descriptor.get("file")
+        if descriptor.get("sha256") != SCREENSHOT_SHA256:
+            raise AssertionError("fixture screenshot digest is not deterministic")
+        if (
+            not isinstance(relative_path, str)
+            or not relative_path.startswith("screenshots/")
+            or "/" in relative_path.removeprefix("screenshots/")
+        ):
+            raise AssertionError("fixture screenshot path is invalid")
+        target = run_dir / relative_path
+        target.write_bytes(SCREENSHOT_PNG)
+        if hashlib.sha256(target.read_bytes()).hexdigest() != SCREENSHOT_SHA256:
+            raise AssertionError("written screenshot digest changed")
+
+
+def write_evidence(root: Path, value: dict[str, object], name: str) -> Path:
+    path = root / name
+    path.write_text(json.dumps(value, ensure_ascii=False), encoding="utf-8")
+    return path
+
+
+def load_evidence(root: Path, name: str) -> dict[str, object]:
+    value = load_fixture(name)
+    attach_screenshot_proof(value, root / "rec_source")
     return value
 
 
 def evidence_fixture(root: Path, name: str) -> Path:
-    path = root / name
-    path.write_text(json.dumps(load_fixture(name), ensure_ascii=False), encoding="utf-8")
-    return path
+    value = load_fixture(name)
+    attach_screenshot_proof(value, root / "rec_source")
+    return write_evidence(root, value, name)
 
 
 def prepare_only(root: Path, platform: Platform = Platform.SHEIN_US, limit: int = 2):
@@ -356,7 +377,7 @@ class PrepareTests(unittest.TestCase):
             self.assertFalse(any(isinstance(event, tuple) and event[0] == "status" for event in lark.events))
 
 
-class EvidenceTests(unittest.TestCase):
+class EvidenceValidationTests(unittest.TestCase):
     def _run(self, fixture="shein-evidence.json", platform=Platform.SHEIN_US):
         context = tempfile.TemporaryDirectory()
         root = Path(context.name)
@@ -381,15 +402,171 @@ class EvidenceTests(unittest.TestCase):
                 finally:
                     context.cleanup()
 
+    def test_validate_requires_screenshot_root_and_observation_reference(self):
+        mutations = {
+            "missing screenshot root": lambda value: value.pop("screenshots"),
+            "missing observation reference": lambda value: value["queries"][0]["observations"][0].pop("evidence_ref"),
+        }
+        for label, mutate in mutations.items():
+            with self.subTest(case=label), tempfile.TemporaryDirectory() as directory:
+                root = Path(directory)
+                prepare_only(root)
+                value = load_evidence(root, "shein-evidence.json")
+                mutate(value)
+                path = write_evidence(root, value, "missing-screenshot-evidence.json")
+                with self.assertRaisesRegex(WorkflowError, "screenshot evidence is invalid"):
+                    validate_evidence(root / "rec_source", path, clock=frozen_clock())
+
+    def test_screenshot_schema_and_regions_are_exactly_bound(self):
+        mutations = {
+            "unknown root key": lambda value: value.update({"unexpected": True}),
+            "unknown screenshot key": lambda value: value["screenshots"][0].update({"unexpected": True}),
+            "search screenshot bound to another query": lambda value: value["screenshots"][0].update({
+                "query": value["queries"][1]["query"],
+            }),
+            "detail screenshot bound to another identity and URL": lambda value: value["screenshots"][3].update({
+                "identity": value["details"][1]["identity"],
+                "page_url": value["details"][1]["detail_url"],
+            }),
+            "out-of-bounds observation box": lambda value: value["queries"][0]["observations"][0]["evidence_ref"].update({
+                "bbox": [0, 0, 1001, 20],
+            }),
+        }
+        for label, mutate in mutations.items():
+            with self.subTest(case=label), tempfile.TemporaryDirectory() as directory:
+                root = Path(directory)
+                prepare_only(root)
+                value = load_evidence(root, "shein-evidence.json")
+                mutate(value)
+                path = write_evidence(root, value, "invalid-screenshot-binding.json")
+                with self.assertRaisesRegex(WorkflowError, "screenshot evidence is invalid"):
+                    validate_evidence(root / "rec_source", path, clock=frozen_clock())
+
+    def test_qualified_detail_requires_visual_and_metrics_screenshot_purposes(self):
+        mutations = {
+            "qualified missing visual": lambda value: value["details"][0].update({
+                "evidence_refs": [value["details"][0]["evidence_refs"][1]],
+            }),
+            "qualified missing metrics": lambda value: value["details"][0].update({
+                "evidence_refs": [value["details"][0]["evidence_refs"][0]],
+            }),
+            "visual mismatch with only metrics": lambda value: value["details"][0].update({
+                "status": "rejected", "reason": "visual_structure_mismatch",
+                "match_level": None, "visual_features": None,
+                "evidence_refs": [value["details"][0]["evidence_refs"][1]],
+            }),
+            "threshold failure with only visual": lambda value: value["details"][0].update({
+                "status": "rejected", "reason": "threshold_failure",
+                "reviews_display": "1", "match_level": None, "visual_features": None,
+                "evidence_refs": [value["details"][0]["evidence_refs"][0]],
+            }),
+            "identity change without access-state": lambda value: value["details"][0].update({
+                "status": "rejected", "reason": "identity_changed",
+                "detail_url": "https://us.shein.com/changed-p-999999.html",
+                "product_id": "999999", "match_level": None, "visual_features": None,
+            }),
+            "unknown purpose": lambda value: value["details"][0]["evidence_refs"][0].update({
+                "purpose": "title",
+            }),
+        }
+        for label, mutate in mutations.items():
+            with self.subTest(case=label), tempfile.TemporaryDirectory() as directory:
+                root = Path(directory)
+                prepare_only(root)
+                value = load_evidence(root, "shein-evidence.json")
+                mutate(value)
+                path = write_evidence(root, value, "invalid-detail-purpose.json")
+                with self.assertRaisesRegex(WorkflowError, "screenshot evidence is invalid"):
+                    validate_evidence(root / "rec_source", path, clock=frozen_clock())
+
+    def test_detail_screenshot_purpose_matrix_accepts_each_reason(self):
+        def refs(value, *purposes):
+            by_purpose = {
+                item["purpose"]: item for item in value["details"][0]["evidence_refs"]
+            }
+            access_state = {
+                **by_purpose["visual"],
+                "purpose": "access_state",
+            }
+            by_purpose["access_state"] = access_state
+            return [copy.deepcopy(by_purpose[purpose]) for purpose in purposes]
+
+        def reject(value, reason, purposes):
+            detail = value["details"][0]
+            detail.update({
+                "status": "rejected", "reason": reason,
+                "match_level": None, "visual_features": None,
+                "evidence_refs": refs(value, *purposes),
+            })
+
+        def metric_missing(value):
+            reject(value, "metric_missing_or_ambiguous", ("metrics",))
+            value["details"][0]["reviews_display"] = None
+
+        def threshold_failure(value):
+            reject(value, "threshold_failure", ("metrics",))
+            value["details"][0]["reviews_display"] = "1"
+
+        def identity_changed(value):
+            reject(value, "identity_changed", ("access_state",))
+            value["details"][0].update({
+                "detail_url": "https://us.shein.com/changed-p-999999.html",
+                "product_id": "999999",
+            })
+
+        def inaccessible(value):
+            reject(value, "detail_inaccessible", ("access_state",))
+            value["details"][0].update({
+                "detail_url": None, "product_id": None, "title": None,
+                "category": None, "sold_display": None, "reviews_display": None,
+                "rating_display": None,
+            })
+
+        cases = {
+            "qualified": lambda value: None,
+            "visual structure mismatch": lambda value: reject(value, "visual_structure_mismatch", ("visual",)),
+            "imagery inaccessible": lambda value: reject(value, "imagery_ambiguous_or_inaccessible", ("visual",)),
+            "metric missing": metric_missing,
+            "threshold failure": threshold_failure,
+            "identity changed": identity_changed,
+            "detail inaccessible": inaccessible,
+        }
+        for label, mutate in cases.items():
+            with self.subTest(case=label), tempfile.TemporaryDirectory() as directory:
+                root = Path(directory)
+                prepare_only(root)
+                value = load_evidence(root, "shein-evidence.json")
+                mutate(value)
+                path = write_evidence(root, value, "purpose-matrix.json")
+                validate_evidence(root / "rec_source", path, clock=frozen_clock())
+
+    def test_screenshot_proof_preserves_candidate_values_and_ordering(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            prepare_only(root)
+            validate_evidence(
+                root / "rec_source", evidence_fixture(root, "shein-evidence.json"),
+                clock=frozen_clock(),
+            )
+            validated = CheckpointStore(root).load("rec_source")["stages"]["evidence_validated"]
+            self.assertEqual(5, validated["screenshot_count"])
+            self.assertEqual(5, len(validated["screenshot_manifest"]))
+            self.assertEqual(
+                ["shein-us:100001", "shein-us:100002"],
+                [candidate["identity"] for candidate in validated["candidates"]],
+            )
+            self.assertEqual([500, 300], [candidate["reviews_value"] for candidate in validated["candidates"]])
+            self.assertEqual([4.8, 4.6], [candidate["rating_value"] for candidate in validated["candidates"]])
+            self.assertEqual(["同款", "高度相似"], [candidate["match_level"] for candidate in validated["candidates"]])
+
     def test_shein_qualified_details_may_omit_sold_count(self):
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
             prepare_run(root, Platform.SHEIN_US)
-            value = load_fixture("shein-evidence.json")
+            value = load_evidence(root, "shein-evidence.json")
             for detail in value["details"]:
                 detail["sold_display"] = None
-            path = root / "shein-without-sold.json"
-            path.write_text(json.dumps(value), encoding="utf-8")
+            path = write_evidence(root, value, "shein-without-sold.json")
 
             validate_evidence(root / "rec_source", path, clock=frozen_clock())
 
@@ -400,12 +577,11 @@ class EvidenceTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
             prepare_run(root, Platform.MERCADO_MX)
-            value = load_fixture("mercado-evidence.json")
+            value = load_evidence(root, "mercado-evidence.json")
             for detail in value["details"]:
                 detail["reviews_display"] = None
                 detail["rating_display"] = None
-            path = root / "mercado-without-reviews-rating.json"
-            path.write_text(json.dumps(value), encoding="utf-8")
+            path = write_evidence(root, value, "mercado-without-reviews-rating.json")
 
             validate_evidence(root / "rec_source", path, clock=frozen_clock())
 
@@ -455,12 +631,12 @@ class EvidenceTests(unittest.TestCase):
             with self.subTest(platform=platform, feature=feature), tempfile.TemporaryDirectory() as directory:
                 root = Path(directory)
                 prepare_run(root, platform)
-                value = load_fixture(
+                value = load_evidence(
+                    root,
                     "shein-evidence.json" if platform is Platform.SHEIN_US else "mercado-evidence.json"
                 )
                 value["details"][0]["visual_features"] = [feature]
-                path = root / "forbidden-feature.json"
-                path.write_text(json.dumps(value, ensure_ascii=False), encoding="utf-8")
+                path = write_evidence(root, value, "forbidden-feature.json")
                 with self.assertRaisesRegex(WorkflowError, "visual features"):
                     validate_evidence(root / "rec_source", path, clock=frozen_clock())
 
@@ -471,10 +647,9 @@ class EvidenceTests(unittest.TestCase):
                 "rec_source", root, True,
                 lark_client=FakeLark(), ark_client=FakeArk(source_color_profile),
             )
-            value = load_fixture("shein-evidence.json")
+            value = load_evidence(root, "shein-evidence.json")
             value["details"][0]["visual_features"] = ["ultraviolet embroidery"]
-            path = root / "source-color-feature.json"
-            path.write_text(json.dumps(value), encoding="utf-8")
+            path = write_evidence(root, value, "source-color-feature.json")
             with self.assertRaisesRegex(WorkflowError, "visual features"):
                 validate_evidence(root / "rec_source", path, clock=frozen_clock())
 
@@ -485,10 +660,9 @@ class EvidenceTests(unittest.TestCase):
                 "rec_source", root, True,
                 lark_client=FakeLark(), ark_client=FakeArk(source_color_profile),
             )
-            value = load_fixture("shein-evidence.json")
+            value = load_evidence(root, "shein-evidence.json")
             value["details"][0]["visual_features"] = ["apricot embroidery"]
-            path = root / "multiword-source-color-feature.json"
-            path.write_text(json.dumps(value), encoding="utf-8")
+            path = write_evidence(root, value, "multiword-source-color-feature.json")
             with self.assertRaisesRegex(WorkflowError, "visual features"):
                 validate_evidence(root / "rec_source", path, clock=frozen_clock())
 
@@ -496,12 +670,11 @@ class EvidenceTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
             prepare_run(root)
-            value = load_fixture("shein-evidence.json")
+            value = load_evidence(root, "shein-evidence.json")
             value["details"][0]["visual_features"] = [
                 "3D flower applique", "puff sleeves", "A-line skirt",
             ]
-            path = root / "valid-features.json"
-            path.write_text(json.dumps(value), encoding="utf-8")
+            path = write_evidence(root, value, "valid-features.json")
             validate_evidence(root / "rec_source", path, clock=frozen_clock())
             stored = CheckpointStore(root).load("rec_source")["stages"]["evidence_validated"]
             self.assertEqual(
@@ -512,14 +685,13 @@ class EvidenceTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
             prepare_run(root)
-            value = load_fixture("shein-evidence.json")
+            value = load_evidence(root, "shein-evidence.json")
             value["details"][0].update({
                 "status": "rejected", "reason": "threshold_failure",
                 "sold_display": "1 sold", "match_level": None,
                 "visual_features": ["red embroidery"],
             })
-            path = root / "rejected-claim.json"
-            path.write_text(json.dumps(value), encoding="utf-8")
+            path = write_evidence(root, value, "rejected-claim.json")
             with self.assertRaisesRegex(WorkflowError, "rejected detail"):
                 validate_evidence(root / "rec_source", path, clock=frozen_clock())
 
@@ -547,10 +719,9 @@ class EvidenceTests(unittest.TestCase):
             with self.subTest(case=label), tempfile.TemporaryDirectory() as directory:
                 root = Path(directory)
                 prepare_run(root)
-                value = load_fixture("shein-evidence.json")
+                value = load_evidence(root, "shein-evidence.json")
                 mutate(value)
-                path = root / "input.json"
-                path.write_text(json.dumps(value), encoding="utf-8")
+                path = write_evidence(root, value, "input.json")
                 with self.assertRaises(WorkflowError):
                     validate_evidence(root / "rec_source", path)
 
@@ -565,14 +736,13 @@ class EvidenceTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
             prepare_run(root)
-            value = load_fixture("shein-evidence.json")
+            value = load_evidence(root, "shein-evidence.json")
             for block_index, block in enumerate(value["queries"]):
                 for index, observation in enumerate(block["observations"]):
                     observation["product_id"] = str(700000 + block_index * 100 + index)
                     observation["url"] = f"https://us.shein.com/unique-p-{700000 + block_index * 100 + index}.html"
             value["details"] = []
-            path = root / "input.json"
-            path.write_text(json.dumps(value), encoding="utf-8")
+            path = write_evidence(root, value, "input.json")
             with self.assertRaisesRegex(WorkflowError, "recurring"):
                 validate_evidence(root / "rec_source", path)
 
@@ -643,12 +813,11 @@ class EvidenceTests(unittest.TestCase):
             with self.subTest(fixture=fixture), tempfile.TemporaryDirectory() as directory:
                 root = Path(directory)
                 prepare_run(root, platform)
-                value = load_fixture(fixture)
+                value = load_evidence(root, fixture)
                 # Keep the recurring URL but forge its explicit identity in two query blocks.
                 value["queries"][0]["observations"][1]["product_id"] = false_id
                 value["queries"][1]["observations"][0]["product_id"] = false_id
-                path = root / "forged-id.json"
-                path.write_text(json.dumps(value), encoding="utf-8")
+                path = write_evidence(root, value, "forged-id.json")
                 with self.assertRaisesRegex(WorkflowError, "identit"):
                     validate_evidence(root / "rec_source", path)
 
@@ -666,10 +835,9 @@ class EvidenceTests(unittest.TestCase):
             with self.subTest(case=label), tempfile.TemporaryDirectory() as directory:
                 root = Path(directory)
                 prepare_run(root)
-                value = load_fixture("shein-evidence.json")
+                value = load_evidence(root, "shein-evidence.json")
                 mutate(value)
-                path = root / "evidence.json"
-                path.write_text(json.dumps(value), encoding="utf-8")
+                path = write_evidence(root, value, "evidence.json")
                 with self.assertRaisesRegex(WorkflowError, "detail|exhaust|prefix|order"):
                     validate_evidence(root / "rec_source", path, clock=frozen_clock())
 
@@ -684,10 +852,9 @@ class EvidenceTests(unittest.TestCase):
             with self.subTest(case=label), tempfile.TemporaryDirectory() as directory:
                 root = Path(directory)
                 prepare_run(root)
-                value = load_fixture("shein-evidence.json")
+                value = load_evidence(root, "shein-evidence.json")
                 mutate(value["details"][0])
-                path = root / "evidence.json"
-                path.write_text(json.dumps(value), encoding="utf-8")
+                path = write_evidence(root, value, "evidence.json")
                 with self.assertRaises(WorkflowError):
                     validate_evidence(root / "rec_source", path, clock=frozen_clock())
 
@@ -699,10 +866,9 @@ class EvidenceTests(unittest.TestCase):
             with self.subTest(case=label), tempfile.TemporaryDirectory() as directory:
                 root = Path(directory)
                 prepare_run(root)
-                value = load_fixture("shein-evidence.json")
+                value = load_evidence(root, "shein-evidence.json")
                 value["details"][0]["category"] = category
-                path = root / "visual-match.json"
-                path.write_text(json.dumps(value), encoding="utf-8")
+                path = write_evidence(root, value, "visual-match.json")
 
                 validate_evidence(root / "rec_source", path, clock=frozen_clock())
 
@@ -713,7 +879,7 @@ class EvidenceTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
             prepare_run(root)
-            value = load_fixture("shein-evidence.json")
+            value = load_evidence(root, "shein-evidence.json")
             value["details"][0].update({
                 "status": "rejected",
                 "reason": "visual_structure_mismatch",
@@ -721,8 +887,7 @@ class EvidenceTests(unittest.TestCase):
                 "match_level": None,
                 "visual_features": None,
             })
-            path = root / "visual-mismatch.json"
-            path.write_text(json.dumps(value), encoding="utf-8")
+            path = write_evidence(root, value, "visual-mismatch.json")
 
             validate_evidence(root / "rec_source", path, clock=frozen_clock())
 
@@ -733,7 +898,7 @@ class EvidenceTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
             prepare_run(root)
-            value = load_fixture("shein-evidence.json")
+            value = load_evidence(root, "shein-evidence.json")
             value["details"][0].update({
                 "status": "rejected",
                 "reason": "category_mismatch",
@@ -741,8 +906,7 @@ class EvidenceTests(unittest.TestCase):
                 "match_level": None,
                 "visual_features": None,
             })
-            path = root / "legacy-category-reason.json"
-            path.write_text(json.dumps(value), encoding="utf-8")
+            path = write_evidence(root, value, "legacy-category-reason.json")
 
             with self.assertRaisesRegex(WorkflowError, "legacy"):
                 validate_evidence(root / "rec_source", path, clock=frozen_clock())
@@ -751,7 +915,7 @@ class EvidenceTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
             prepare_run(root)
-            value = load_fixture("shein-evidence.json")
+            value = load_evidence(root, "shein-evidence.json")
             for detail in value["details"]:
                 detail.update({
                     "status": "rejected",
@@ -760,8 +924,7 @@ class EvidenceTests(unittest.TestCase):
                     "match_level": None,
                     "visual_features": None,
                 })
-            path = root / "zero.json"
-            path.write_text(json.dumps(value), encoding="utf-8")
+            path = write_evidence(root, value, "zero.json")
             summary = validate_evidence(
                 root / "rec_source", path, clock=frozen_clock()
             )
@@ -774,7 +937,7 @@ class EvidenceTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
             prepare_run(root)
-            value = load_fixture("shein-evidence.json")
+            value = load_evidence(root, "shein-evidence.json")
             value["details"][0].update({
                 "status": "rejected",
                 "reason": "identity_changed",
@@ -782,6 +945,10 @@ class EvidenceTests(unittest.TestCase):
                 "product_id": "999999",
                 "match_level": None,
                 "visual_features": None,
+                "evidence_refs": [{
+                    **value["details"][0]["evidence_refs"][0],
+                    "purpose": "access_state",
+                }],
             })
             value["details"][1].update({
                 "status": "rejected",
@@ -795,9 +962,12 @@ class EvidenceTests(unittest.TestCase):
                 "rating_display": None,
                 "match_level": None,
                 "visual_features": None,
+                "evidence_refs": [{
+                    **value["details"][1]["evidence_refs"][0],
+                    "purpose": "access_state",
+                }],
             })
-            path = root / "rejected.json"
-            path.write_text(json.dumps(value), encoding="utf-8")
+            path = write_evidence(root, value, "rejected.json")
             validate_evidence(root / "rec_source", path, clock=frozen_clock())
             candidates = CheckpointStore(root).load("rec_source")["stages"]["evidence_validated"]["candidates"]
             self.assertEqual([], candidates)
@@ -822,10 +992,9 @@ class EvidenceTests(unittest.TestCase):
             with self.subTest(case=label), tempfile.TemporaryDirectory() as directory:
                 root = Path(directory)
                 prepare_run(root)
-                value = load_fixture("shein-evidence.json")
+                value = load_evidence(root, "shein-evidence.json")
                 mutate(value["details"][0])
-                path = root / "invalid-reason.json"
-                path.write_text(json.dumps(value), encoding="utf-8")
+                path = write_evidence(root, value, "invalid-reason.json")
                 with self.assertRaises(WorkflowError):
                     validate_evidence(root / "rec_source", path, clock=frozen_clock())
 
@@ -850,10 +1019,9 @@ class EvidenceTests(unittest.TestCase):
             with self.subTest(case=label), tempfile.TemporaryDirectory() as directory:
                 root = Path(directory)
                 prepare_run(root)
-                value = load_fixture("shein-evidence.json")
+                value = load_evidence(root, "shein-evidence.json")
                 mutate(value["details"][0])
-                path = root / "false-reason.json"
-                path.write_text(json.dumps(value), encoding="utf-8")
+                path = write_evidence(root, value, "false-reason.json")
                 with self.assertRaises(WorkflowError):
                     validate_evidence(root / "rec_source", path, clock=frozen_clock())
 
@@ -1126,10 +1294,9 @@ class FinalizeTests(unittest.TestCase):
     def _digestless_finalized_one(self, root: Path) -> tuple[Path, Path, Path]:
         """Build a valid pre-digest finalized v2 run with one selected result."""
         prepare_run(root, limit=1)
-        evidence = load_fixture("shein-evidence.json")
+        evidence = load_evidence(root, "shein-evidence.json")
         evidence["details"] = evidence["details"][:1]
-        evidence_path = root / "one-result-evidence.json"
-        evidence_path.write_text(json.dumps(evidence), encoding="utf-8")
+        evidence_path = write_evidence(root, evidence, "one-result-evidence.json")
         validate_evidence(root / "rec_source", evidence_path, clock=frozen_clock())
         finalize(
             root / "rec_source",
@@ -1435,7 +1602,7 @@ class FinalizeTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
             prepare_run(root)
-            value = load_fixture("shein-evidence.json")
+            value = load_evidence(root, "shein-evidence.json")
             for detail in value["details"]:
                 detail.update({
                     "status": "rejected",
@@ -1444,8 +1611,7 @@ class FinalizeTests(unittest.TestCase):
                     "match_level": None,
                     "visual_features": None,
                 })
-            path = root / "zero.json"
-            path.write_text(json.dumps(value), encoding="utf-8")
+            path = write_evidence(root, value, "zero.json")
             validate_evidence(root / "rec_source", path, clock=frozen_clock())
             lark = FakeLark()
             summary = finalize(root / "rec_source", lark_client=lark, clock=frozen_clock())
@@ -1478,10 +1644,9 @@ class FinalizeTests(unittest.TestCase):
                 with self.assertRaises(WorkflowError):
                     finalize(root / "rec_source", lark_client=lark, clock=frozen_clock())
             self.assertEqual(1, len([event for event in lark.events if event[0] == "write"]))
-            changed = load_fixture("shein-evidence.json")
+            changed = load_evidence(root, "shein-evidence.json")
             changed["details"][0]["title"] = "Changed detail title"
-            changed_path = root / "changed.json"
-            changed_path.write_text(json.dumps(changed), encoding="utf-8")
+            changed_path = write_evidence(root, changed, "changed.json")
             with self.assertRaisesRegex(WorkflowError, "replace"):
                 validate_evidence(root / "rec_source", changed_path, clock=frozen_clock())
 
@@ -1679,9 +1844,8 @@ class FinalizeTests(unittest.TestCase):
             with self.subTest(case=label), tempfile.TemporaryDirectory() as directory:
                 root = Path(directory)
                 prepare_only(root)
-                source = load_fixture("shein-evidence.json")
-                source_path = root / "source.json"
-                source_path.write_text(json.dumps(source), encoding="utf-8")
+                source = load_evidence(root, "shein-evidence.json")
+                source_path = write_evidence(root, source, "source.json")
                 validate_evidence(root / "rec_source", source_path, clock=frozen_clock())
 
                 store = CheckpointStore(root)
@@ -1749,10 +1913,9 @@ class FinalizeTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
             prepare_run(root, limit=1)
-            value = load_fixture("shein-evidence.json")
+            value = load_evidence(root, "shein-evidence.json")
             value["details"] = value["details"][:1]
-            evidence_path = root / "one.json"
-            evidence_path.write_text(json.dumps(value), encoding="utf-8")
+            evidence_path = write_evidence(root, value, "one.json")
             validate_evidence(root / "rec_source", evidence_path, clock=frozen_clock())
             event_path = root / "external-writes.log"
             context = multiprocessing.get_context("spawn")
