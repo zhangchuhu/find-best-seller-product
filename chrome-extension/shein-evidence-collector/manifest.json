@@ -1,0 +1,14 @@
+{
+  "manifest_version": 3,
+  "name": "SHEIN Local Evidence Collector",
+  "version": "0.1.0",
+  "permissions": ["activeTab", "downloads"],
+  "host_permissions": ["https://us.shein.com/*"],
+  "background": {"service_worker": "background.js"},
+  "action": {"default_title": "Collect SHEIN evidence"},
+  "content_scripts": [{
+    "matches": ["https://us.shein.com/*"],
+    "js": ["content.js"],
+    "run_at": "document_idle"
+  }]
+}

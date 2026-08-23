@@ -1,0 +1,43 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>SHEIN Evidence Collector</title>
+  <style>
+    body { font: 14px system-ui, sans-serif; margin: 20px; color: #191919; }
+    label { display: block; margin: 12px 0; }
+    input, select, textarea, button { box-sizing: border-box; font: inherit; width: 100%; }
+    input, select, textarea { margin-top: 4px; padding: 8px; }
+    button { margin-top: 10px; padding: 9px; }
+    #error { color: #a40000; white-space: pre-wrap; }
+    #status { white-space: pre-wrap; }
+  </style>
+</head>
+<body>
+  <h1>SHEIN evidence</h1>
+  <form id="setup">
+    <label>Task record ID <input id="record-id" required pattern="rec[A-Za-z0-9_-]+"></label>
+    <label>Platform <select id="platform"><option value="shein-us">SHEIN US</option></select></label>
+    <label>Ark query 1 <input class="query" required></label>
+    <label>Ark query 2 <input class="query" required></label>
+    <label>Ark query 3 <input class="query" required></label>
+    <label>Card limit (30–50) <input id="limit" type="number" min="30" max="50" value="30" required></label>
+    <button type="submit">Begin collection</button>
+  </form>
+  <section id="controls" hidden>
+    <button id="collect-search" type="button">Collect current search query</button>
+    <label>Detail status
+      <select id="detail-status"><option value="qualified">Qualified</option><option value="rejected">Rejected</option></select>
+    </label>
+    <label>Rejection reason <select id="detail-reason"><option value=""></option><option>visual_structure_mismatch</option><option>imagery_ambiguous_or_inaccessible</option><option>metric_missing_or_ambiguous</option><option>threshold_failure</option><option>identity_changed</option><option>detail_inaccessible</option></select></label>
+    <label>Match level <select id="match-level"><option value=""></option><option>同款</option><option>高度相似</option><option>类似竞品</option></select></label>
+    <label>Visible visual features, one per line <textarea id="visual-features"></textarea></label>
+    <button id="capture-detail" type="button">Capture current detail</button>
+    <button id="export" type="button">Download evidence package</button>
+  </section>
+  <p id="status" role="status"></p>
+  <p id="error" role="alert"></p>
+  <script src="collector.js"></script>
+</body>
+</html>
