@@ -718,6 +718,14 @@ def _detail_candidate(
     sold = parse_count(detail["sold_display"])
     reviews = parse_count(detail["reviews_display"])
     rating = parse_rating(detail["rating_display"])
+    required_metrics = (
+        (("sold", sold, task.min_sold),)
+        if platform is Platform.MERCADO_MX
+        else (
+            ("reviews", reviews, task.min_reviews),
+            ("rating", rating, task.min_rating),
+        )
+    )
     features = detail["visual_features"]
 
     normalized = {
@@ -751,15 +759,16 @@ def _detail_candidate(
                 raise _error("detail rejection reason requires visible detail identity title and category")
         if reason == "imagery_ambiguous_or_inaccessible" and normalized_url is None:
             raise _error("imagery rejection requires a detail URL")
-        if reason == "threshold_failure" and (sold is None or reviews is None or rating is None):
+        if reason == "threshold_failure" and any(value is None for _, value, _ in required_metrics):
             raise _error("threshold rejection requires unambiguous metrics")
-        if reason == "threshold_failure" and not any((
-            sold < task.min_sold,
-            reviews < task.min_reviews,
-            rating < task.min_rating,
-        )):
+        if reason == "threshold_failure" and not any(
+            value is not None and value < threshold
+            for _, value, threshold in required_metrics
+        ):
             raise _error("threshold rejection requires a failed task threshold")
-        if reason == "metric_missing_or_ambiguous" and all(value is not None for value in (sold, reviews, rating)):
+        if reason == "metric_missing_or_ambiguous" and all(
+            value is not None for _, value, _ in required_metrics
+        ):
             raise _error("metric rejection must identify a missing metric")
         if reason == "category_mismatch" and category_matches:
             raise _error("category rejection requires a mismatched source category")
@@ -785,9 +794,12 @@ def _detail_candidate(
         raise _error("qualified detail identity title and category are required")
     if not category_matches:
         raise _error("qualified detail category does not match the source profile")
-    if sold is None or reviews is None or rating is None:
+    if any(value is None for _, value, _ in required_metrics):
         raise _error("qualified detail metrics are missing or ambiguous")
-    if sold < task.min_sold or reviews < task.min_reviews or rating < task.min_rating:
+    if any(
+        value is not None and value < threshold
+        for _, value, threshold in required_metrics
+    ):
         raise _error("qualified detail is below a task threshold")
     if isinstance(features, (str, bytes)) or not isinstance(features, list):
         raise _error("detail visual features are invalid")

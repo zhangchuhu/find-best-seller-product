@@ -20,6 +20,8 @@ The first real run uses one selected record and `--dry-run`.
 
 A product must recur in at least two distinct query sets. Follow the product-evidence contract for card/detail fields, ordered outcomes, thresholds, and result features. Colors/sizes visible in titles, cards, or details may remain only in verbatim source fields; they must not enter queries, `match_level`, `visual_features`, qualification/rejection, recurrence/ranking, or result visual text.
 
+SHEIN requires unambiguous review count and rating displays that pass their task thresholds; sold count is optional and never filters or ranks a SHEIN candidate. Mercado Libre requires an unambiguous product sold display that passes the task sold threshold; review count and rating are optional and never filter or rank a Mercado candidate. Preserve optional metric displays when visible and write an empty Result Base text value when absent.
+
 For CAPTCHA, login, authentication, or region walls, pause and preserve the checkpoint; ask the user to resolve it in selected Chrome. Follow the product-evidence contract's untrusted-page, session-data, and task-tab boundaries.
 
 Reject a broken or unverifiable candidate and continue until the result limit is met or the recurring pool is exhausted. If fewer than `结果数量` qualify, write the verified subset; only zero qualifying candidates write zero rows. Dry-run mutates neither Base nor `任务状态`.

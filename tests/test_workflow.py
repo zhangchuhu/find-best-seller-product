@@ -381,6 +381,38 @@ class EvidenceTests(unittest.TestCase):
                 finally:
                     context.cleanup()
 
+    def test_shein_qualified_details_may_omit_sold_count(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            prepare_run(root, Platform.SHEIN_US)
+            value = load_fixture("shein-evidence.json")
+            for detail in value["details"]:
+                detail["sold_display"] = None
+            path = root / "shein-without-sold.json"
+            path.write_text(json.dumps(value), encoding="utf-8")
+
+            validate_evidence(root / "rec_source", path, clock=frozen_clock())
+
+            candidates = CheckpointStore(root).load("rec_source")["stages"]["evidence_validated"]["candidates"]
+            self.assertEqual([None, None], [item["sold_value"] for item in candidates])
+
+    def test_mercado_qualified_details_may_omit_reviews_and_rating(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            prepare_run(root, Platform.MERCADO_MX)
+            value = load_fixture("mercado-evidence.json")
+            for detail in value["details"]:
+                detail["reviews_display"] = None
+                detail["rating_display"] = None
+            path = root / "mercado-without-reviews-rating.json"
+            path.write_text(json.dumps(value), encoding="utf-8")
+
+            validate_evidence(root / "rec_source", path, clock=frozen_clock())
+
+            candidates = CheckpointStore(root).load("rec_source")["stages"]["evidence_validated"]["candidates"]
+            self.assertEqual([None, None], [item["reviews_value"] for item in candidates])
+            self.assertEqual([None, None], [item["rating_value"] for item in candidates])
+
     def test_product_evidence_uses_exact_direct_ark_seeds_and_persists_provenance(self):
         """Catch a validator that accepts a forged direct resolution."""
         with tempfile.TemporaryDirectory() as directory:
@@ -508,7 +540,7 @@ class EvidenceTests(unittest.TestCase):
             "duplicate query": lambda value: value["queries"][1].update({"query": value["queries"][0]["query"]}),
             "identity mismatch": lambda value: value["details"][0].update({"identity": "shein-us:999999"}),
             "duplicate detail": lambda value: value["details"].append(copy.deepcopy(value["details"][0])),
-            "ambiguous metric": lambda value: value["details"][0].update({"sold_display": "Best seller"}),
+            "ambiguous metric": lambda value: value["details"][0].update({"rating_display": "Excellent"}),
             "secret": lambda value: value["details"][0].update({"visual_features": ["Authorization: Bearer x"]}),
         }
         for label, mutate in mutations.items():
@@ -625,7 +657,7 @@ class EvidenceTests(unittest.TestCase):
             "empty": lambda value: value.update({"details": []}),
             "partial rejection": lambda value: value.update({"details": [
                 {**value["details"][0], "status": "rejected", "reason": "threshold_failure",
-                 "sold_display": "1 sold", "match_level": None, "visual_features": None}
+                 "reviews_display": "1", "match_level": None, "visual_features": None}
             ]}),
             "out of order": lambda value: value["details"].reverse(),
             "skipped": lambda value: value.update({"details": [value["details"][1]]}),
@@ -641,9 +673,9 @@ class EvidenceTests(unittest.TestCase):
                 with self.assertRaisesRegex(WorkflowError, "detail|exhaust|prefix|order"):
                     validate_evidence(root / "rec_source", path, clock=frozen_clock())
 
-    def test_qualified_details_are_identity_bound_and_must_meet_every_threshold(self):
+    def test_qualified_details_are_identity_bound_and_must_meet_platform_thresholds(self):
         mutations = {
-            "below threshold": lambda detail: detail.update({"sold_display": "499 sold"}),
+            "below threshold": lambda detail: detail.update({"reviews_display": "99 reviews"}),
             "unrelated url": lambda detail: detail.update({"detail_url": "https://us.shein.com/other-p-999999.html", "product_id": "999999"}),
             "url id conflict": lambda detail: detail.update({"product_id": "999999"}),
             "search title reused": lambda detail: detail.update({"title": ""}),
@@ -669,7 +701,7 @@ class EvidenceTests(unittest.TestCase):
                 detail.update({
                     "status": "rejected",
                     "reason": "threshold_failure",
-                    "sold_display": "1 sold",
+                    "reviews_display": "1",
                     "match_level": None,
                     "visual_features": None,
                 })
@@ -1360,7 +1392,7 @@ class FinalizeTests(unittest.TestCase):
                 detail.update({
                     "status": "rejected",
                     "reason": "threshold_failure",
-                    "sold_display": "1 sold",
+                    "reviews_display": "1",
                     "match_level": None,
                     "visual_features": None,
                 })

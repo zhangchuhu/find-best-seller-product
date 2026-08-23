@@ -22,10 +22,13 @@ category. The result title comes from the detail page, never the search card.
 
 ## Detail metrics
 
-Use product detail only: the displayed product `vendidos`, review count, and
-rating. Preserve each original display string. Normalize conservatively: `mil`
-means ×1000 only in the accepted numeric grammar, and a visible plus sign is a
-lower-bound count whose displayed form remains unchanged. Reject ambiguous metrics rather than estimating them.
+Use product detail only. The displayed product `vendidos` is the only required
+filtering metric and must pass the task sold threshold. Normalize conservatively:
+`mil` means ×1000 only in the accepted numeric grammar, and a visible plus sign
+is a lower-bound count whose displayed form remains unchanged. Review count and
+rating are optional: preserve their original strings when visible, leave their
+result fields empty when absent, and never use them for filtering or ranking.
+Reject an ambiguous required sold metric rather than estimating it.
 
 Search-result card metrics cannot replace detail-page verification. A missing required metric rejects the candidate. Do not use seller totals or followers,
 review count as sold count, a badge-only `MÁS VENDIDO`, or any other proxy.

@@ -152,12 +152,14 @@ def validate_verified_candidate(task: Task, candidate: VerifiedCandidate) -> lis
         reasons.append("platform_mismatch")
     if len(candidate.query_hits) < 2:
         reasons.append("insufficient_query_hits")
-    if candidate.sold_value < task.min_sold:
-        reasons.append("sold_below_threshold")
-    if candidate.reviews_value < task.min_reviews:
-        reasons.append("reviews_below_threshold")
-    if candidate.rating_value < task.min_rating:
-        reasons.append("rating_below_threshold")
+    if task.platform is Platform.MERCADO_MX:
+        if candidate.sold_value is None or candidate.sold_value < task.min_sold:
+            reasons.append("sold_below_threshold")
+    else:
+        if candidate.reviews_value is None or candidate.reviews_value < task.min_reviews:
+            reasons.append("reviews_below_threshold")
+        if candidate.rating_value is None or candidate.rating_value < task.min_rating:
+            reasons.append("rating_below_threshold")
     if any(
         contains_color_or_size(feature, language)
         for feature in candidate.visual_features
@@ -174,14 +176,22 @@ def _ranking_key(candidate: VerifiedCandidate) -> tuple[object, ...]:
         if has_no_organic_rank
         else candidate.earliest_organic_rank
     )
+    marketplace_metrics = (
+        (-candidate.sold_value, 0.0)
+        if candidate.platform is Platform.MERCADO_MX and candidate.sold_value is not None
+        else (
+            -candidate.reviews_value,
+            -candidate.rating_value,
+        )
+        if candidate.reviews_value is not None and candidate.rating_value is not None
+        else (0, 0.0)
+    )
     return (
         -len(candidate.query_hits),
         MATCH_ORDER[candidate.match_level],
         has_no_organic_rank,
         evidence_rank,
-        -candidate.sold_value,
-        -candidate.reviews_value,
-        -candidate.rating_value,
+        *marketplace_metrics,
         candidate.canonical_url,
     )
 
@@ -197,9 +207,9 @@ def _duplicate_representation_key(candidate: VerifiedCandidate) -> tuple[object,
         tuple(sorted(candidate.query_hits)),
         _optional_rank_key(candidate.earliest_organic_rank),
         _optional_rank_key(candidate.earliest_ad_rank),
-        candidate.sold_display,
-        candidate.reviews_display,
-        candidate.rating_display,
+        (candidate.sold_display is None, candidate.sold_display or ""),
+        (candidate.reviews_display is None, candidate.reviews_display or ""),
+        (candidate.rating_display is None, candidate.rating_display or ""),
     )
 
 

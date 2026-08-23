@@ -164,12 +164,12 @@ class VerifiedCandidate:
     query_hits: frozenset[str]
     earliest_organic_rank: int | None
     earliest_ad_rank: int | None
-    sold_display: str
-    sold_value: int
-    reviews_display: str
-    reviews_value: int
-    rating_display: str
-    rating_value: float
+    sold_display: str | None
+    sold_value: int | None
+    reviews_display: str | None
+    reviews_value: int | None
+    rating_display: str | None
+    rating_value: float | None
     match_level: str
     visual_features: tuple[str, ...]
 
@@ -212,12 +212,34 @@ class VerifiedCandidate:
         object.__setattr__(self, "query_hits", frozenset(query_hits))
         object.__setattr__(self, "earliest_organic_rank", organic)
         object.__setattr__(self, "earliest_ad_rank", ad)
-        object.__setattr__(self, "sold_display", _text(self.sold_display, "sold_display"))
-        object.__setattr__(self, "sold_value", _integer(self.sold_value, "sold_value", minimum=0))
-        object.__setattr__(self, "reviews_display", _text(self.reviews_display, "reviews_display"))
-        object.__setattr__(self, "reviews_value", _integer(self.reviews_value, "reviews_value", minimum=0))
-        object.__setattr__(self, "rating_display", _text(self.rating_display, "rating_display"))
-        object.__setattr__(self, "rating_value", _number(self.rating_value, "rating_value", minimum=0, maximum=5))
+        sold_display = _optional_text(self.sold_display, "sold_display")
+        sold_value = None if self.sold_value is None else _integer(self.sold_value, "sold_value", minimum=0)
+        reviews_display = _optional_text(self.reviews_display, "reviews_display")
+        reviews_value = None if self.reviews_value is None else _integer(self.reviews_value, "reviews_value", minimum=0)
+        rating_display = _optional_text(self.rating_display, "rating_display")
+        rating_value = None if self.rating_value is None else _number(
+            self.rating_value, "rating_value", minimum=0, maximum=5
+        )
+        for display, value, label in (
+            (sold_display, sold_value, "sold"),
+            (reviews_display, reviews_value, "reviews"),
+            (rating_display, rating_value, "rating"),
+        ):
+            if display is None and value is not None:
+                raise ValueError(f"{label} value requires a display")
+        if self.platform is Platform.SHEIN_US and (
+            reviews_display is None or reviews_value is None
+            or rating_display is None or rating_value is None
+        ):
+            raise ValueError("SHEIN candidates require reviews and rating")
+        if self.platform is Platform.MERCADO_MX and (sold_display is None or sold_value is None):
+            raise ValueError("Mercado candidates require sold count")
+        object.__setattr__(self, "sold_display", sold_display)
+        object.__setattr__(self, "sold_value", sold_value)
+        object.__setattr__(self, "reviews_display", reviews_display)
+        object.__setattr__(self, "reviews_value", reviews_value)
+        object.__setattr__(self, "rating_display", rating_display)
+        object.__setattr__(self, "rating_value", rating_value)
         object.__setattr__(self, "match_level", match_level)
         object.__setattr__(self, "visual_features", tuple(visual_features))
 
@@ -251,12 +273,12 @@ class VerifiedCandidate:
             query_hits=frozenset(query_hits),
             earliest_organic_rank=organic,
             earliest_ad_rank=ad,
-            sold_display=_text(raw["sold_display"], "sold_display"),
-            sold_value=_integer(raw["sold_value"], "sold_value", minimum=0),
-            reviews_display=_text(raw["reviews_display"], "reviews_display"),
-            reviews_value=_integer(raw["reviews_value"], "reviews_value", minimum=0),
-            rating_display=_text(raw["rating_display"], "rating_display"),
-            rating_value=_number(raw["rating_value"], "rating_value", minimum=0, maximum=5),
+            sold_display=_optional_text(raw["sold_display"], "sold_display"),
+            sold_value=None if raw["sold_value"] is None else _integer(raw["sold_value"], "sold_value", minimum=0),
+            reviews_display=_optional_text(raw["reviews_display"], "reviews_display"),
+            reviews_value=None if raw["reviews_value"] is None else _integer(raw["reviews_value"], "reviews_value", minimum=0),
+            rating_display=_optional_text(raw["rating_display"], "rating_display"),
+            rating_value=None if raw["rating_value"] is None else _number(raw["rating_value"], "rating_value", minimum=0, maximum=5),
             match_level=match_level,
             visual_features=tuple(visual_features),
         )

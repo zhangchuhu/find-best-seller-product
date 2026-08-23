@@ -38,14 +38,17 @@ when the final outcome reaches `结果数量`, or after the whole pool is exhaus
 
 `status` is `qualified` or `rejected`. A qualified outcome has null `reason`, a
 canonical detail-page URL, agreeing explicit/URL/search identity, visible detail title,
-visible garment category agreeing with the Ark category/subtype, all three
-unambiguous threshold-passing displays, and a valid match level. Match level is
+visible garment category agreeing with the Ark category/subtype, the platform-required
+unambiguous threshold-passing displays, and a valid match level. SHEIN requires
+review count and rating only; Mercado Libre requires product sold count only.
+Non-filter metrics remain verbatim when visible and may be null when absent. Match level is
 exactly `同款`, `高度相似`, or `类似竞品`; features are distinct visible garment facts. Color and size may remain only inside verbatim source fields, including titles and displays; they must not enter `match_level`, `visual_features`, qualification/rejection, recurrence/ranking, or result visual text. `visual_features` therefore contains only structural/style facts such as neckline, sleeve, silhouette, construction, or use scene. A rejected outcome
 uses one reason: `category_mismatch`, `imagery_ambiguous_or_inaccessible`,
 `metric_missing_or_ambiguous`, `threshold_failure`, `identity_changed`, or
 `detail_inaccessible`; conditional fields are null only where that reason makes
-them unavailable. A `threshold_failure` must contain three unambiguous metrics
-and at least one must actually be below its matching task threshold. A
+them unavailable. A `threshold_failure` must contain every metric required by
+the declared platform and at least one must actually be below its matching task
+threshold. Missing or ambiguous non-filter metrics do not reject a candidate. A
 `category_mismatch` must contain a visible category outside the normalized Ark
 category/subtype set; any other reason with a visible category must not hide
 category drift. Only qualified outcomes become candidates. Display fields
@@ -98,7 +101,7 @@ submission, extend every block with actually observed ranks through `N`, where
     }
   ],
   "details": [
-    {"identity": "shein-us:12345", "status": "qualified", "reason": null, "detail_url": "https://us.shein.com/black-dress-p-12345.html", "product_id": "12345", "title": "Black Fitted Mini Dress", "category": "mini dress", "sold_display": "1.2k sold", "reviews_display": "245", "rating_display": "4.8", "match_level": "高度相似", "visual_features": ["square neckline", "puff sleeves", "A-line silhouette"]}
+    {"identity": "shein-us:12345", "status": "qualified", "reason": null, "detail_url": "https://us.shein.com/black-dress-p-12345.html", "product_id": "12345", "title": "Black Fitted Mini Dress", "category": "mini dress", "sold_display": null, "reviews_display": "245", "rating_display": "4.8", "match_level": "高度相似", "visual_features": ["square neckline", "puff sleeves", "A-line silhouette"]}
   ]
 }
 ```

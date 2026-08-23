@@ -214,11 +214,11 @@ def candidate(
         query_hits=query_hits,
         earliest_organic_rank=earliest_organic_rank,
         earliest_ad_rank=earliest_ad_rank,
-        sold_display=str(sold_value),
+        sold_display=None if sold_value is None else str(sold_value),
         sold_value=sold_value,
-        reviews_display=str(reviews_value),
+        reviews_display=None if reviews_value is None else str(reviews_value),
         reviews_value=reviews_value,
-        rating_display=str(rating_value),
+        rating_display=None if rating_value is None else str(rating_value),
         rating_value=rating_value,
         match_level=match_level,
         visual_features=visual_features,
@@ -226,6 +226,46 @@ def candidate(
 
 
 class CandidateRankingTests(unittest.TestCase):
+    def test_shein_filters_only_reviews_and_rating(self):
+        current_task = task(platform=Platform.SHEIN_US)
+        accepted = candidate(
+            platform=Platform.SHEIN_US,
+            identity="shein-us:123",
+            canonical_url="https://us.shein.com/dress-p-123.html",
+            sold_value=None,
+        )
+        self.assertEqual([], validate_verified_candidate(current_task, accepted))
+        self.assertEqual([accepted], select_results(current_task, [accepted]))
+
+        self.assertEqual(
+            ["reviews_below_threshold", "rating_below_threshold"],
+            validate_verified_candidate(
+                current_task,
+                candidate(
+                    platform=Platform.SHEIN_US,
+                    identity="shein-us:124",
+                    canonical_url="https://us.shein.com/dress-p-124.html",
+                    sold_value=999999,
+                    reviews_value=9,
+                    rating_value=4.4,
+                ),
+            ),
+        )
+
+    def test_mercado_filters_only_sold_count(self):
+        current_task = task(platform=Platform.MERCADO_MX)
+        accepted = candidate(reviews_value=None, rating_value=None)
+        self.assertEqual([], validate_verified_candidate(current_task, accepted))
+        self.assertEqual([accepted], select_results(current_task, [accepted]))
+
+        self.assertEqual(
+            ["sold_below_threshold"],
+            validate_verified_candidate(
+                current_task,
+                candidate(sold_value=99, reviews_value=999999, rating_value=5),
+            ),
+        )
+
     def test_equality_at_every_threshold_is_inclusive(self):
         self.assertEqual([], validate_verified_candidate(task(), candidate()))
 
@@ -241,8 +281,6 @@ class CandidateRankingTests(unittest.TestCase):
             [
                 "insufficient_query_hits",
                 "sold_below_threshold",
-                "reviews_below_threshold",
-                "rating_below_threshold",
             ],
             validate_verified_candidate(task(), value),
         )
@@ -261,8 +299,6 @@ class CandidateRankingTests(unittest.TestCase):
                 "platform_mismatch",
                 "insufficient_query_hits",
                 "sold_below_threshold",
-                "reviews_below_threshold",
-                "rating_below_threshold",
             ],
             validate_verified_candidate(task(), value),
         )
@@ -350,7 +386,7 @@ class CandidateRankingTests(unittest.TestCase):
             [item.identity for item in select_results(task(), [ad_only, organic])],
         )
 
-    def test_sold_reviews_rating_and_url_break_ties_in_order(self):
+    def test_mercado_sold_and_url_break_ties_while_other_metrics_do_not(self):
         base = candidate()
         cases = [
             (
@@ -361,12 +397,12 @@ class CandidateRankingTests(unittest.TestCase):
             (
                 candidate(identity="mercado-libre-mx:MLM2", canonical_url="https://www.mercadolibre.com.mx/item-MLM2", reviews_value=11),
                 base,
-                "mercado-libre-mx:MLM2",
+                "mercado-libre-mx:MLM1",
             ),
             (
                 candidate(identity="mercado-libre-mx:MLM2", canonical_url="https://www.mercadolibre.com.mx/item-MLM2", rating_value=4.6),
                 base,
-                "mercado-libre-mx:MLM2",
+                "mercado-libre-mx:MLM1",
             ),
             (
                 candidate(identity="mercado-libre-mx:MLM0", canonical_url="https://www.mercadolibre.com.mx/a-MLM0"),

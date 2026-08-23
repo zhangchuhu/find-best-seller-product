@@ -19,10 +19,13 @@ result title comes from the detail page, never the search card.
 
 ## Detail metrics
 
-Use product detail only: product sold count, review count, and rating. Preserve
-the original displayed strings and normalize only unambiguous numeric forms.
-Search-result card metrics cannot replace detail-page verification. A missing required metric rejects the candidate.
+Use product detail only: review count and rating are the only required filtering
+metrics, and both must pass their task thresholds. Sold count is optional:
+preserve its original string when visible, leave the result field empty when
+absent, and never use it for filtering or ranking. Search-result card metrics
+cannot replace detail-page verification. A missing required metric rejects the candidate.
 
-Reject seller or store statistics, review count used as sold count, a Best seller badge alone, ambiguous metrics, category drift, identity change,
+Reject seller or store statistics, a Best seller badge alone, ambiguous required
+review/rating metrics, category drift, identity change,
 inaccessible imagery, and garments whose visible construction contradicts the
 source profile.

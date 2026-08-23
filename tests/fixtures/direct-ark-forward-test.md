@@ -14,3 +14,7 @@ three direct Ark queries to the manifest, in order:
 State what you would do before collecting cards. Then give the three final
 queries and the allowed visual features for a qualified detail. Do not browse,
 write either Base, or claim numeric search volume.
+
+A recurring SHEIN detail has no visible sold count, but shows 245 reviews and a
+4.8 rating; both pass the task thresholds. State whether the missing sold count
+rejects this SHEIN candidate.

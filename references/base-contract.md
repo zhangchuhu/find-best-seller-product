@@ -50,6 +50,8 @@ must be text containing a positive integer.
 The business key is exactly `(SKU, platform label, canonical 爆款链接)`. The
 persisted platform labels are `Mercado Libre México` and `SHEIN US`. Duplicate
 rows with the same key are an error rather than an arbitrary update target.
+For SHEIN, an absent optional sold display is written as empty text. For Mercado
+Libre, absent optional review-count or rating displays are written as empty text.
 
 ## CLI matrix and write boundary
 

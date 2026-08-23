@@ -781,9 +781,9 @@ class LarkBaseClient:
             "平台": LarkBaseClient._platform_label(candidate.platform),
             "标题": candidate.title,
             "爆款链接": canonical,
-            "vendidos 数": candidate.sold_display,
-            "评价数": candidate.reviews_display,
-            "评分": candidate.rating_display,
+            "vendidos 数": candidate.sold_display or "",
+            "评价数": candidate.reviews_display or "",
+            "评分": candidate.rating_display or "",
             "视觉特征": visual_feature_text(candidate),
         }
 

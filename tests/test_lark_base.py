@@ -1,3 +1,4 @@
+import dataclasses
 import json
 import os
 import stat
@@ -524,6 +525,32 @@ def result_matrix(rows=(), record_ids=(), *, has_more=False):
 
 
 class LarkWriteTests(unittest.TestCase):
+    def test_result_payload_blanks_only_absent_non_filter_metrics(self):
+        shein_candidate = dataclasses.replace(
+            sample_candidate(), sold_display=None, sold_value=None,
+        )
+        shein_payload = LarkBaseClient._result_payload(sample_task(), shein_candidate)
+        self.assertEqual("", shein_payload["vendidos 数"])
+        self.assertEqual("84", shein_payload["评价数"])
+        self.assertEqual("4.7 de 5", shein_payload["评分"])
+
+        mercado_candidate = dataclasses.replace(
+            sample_candidate(
+                platform=Platform.MERCADO_MX,
+                canonical_url="https://www.mercadolibre.com.mx/item-MLM123",
+            ),
+            reviews_display=None,
+            reviews_value=None,
+            rating_display=None,
+            rating_value=None,
+        )
+        mercado_payload = LarkBaseClient._result_payload(
+            sample_task(platform=Platform.MERCADO_MX), mercado_candidate,
+        )
+        self.assertEqual("1.2k sold", mercado_payload["vendidos 数"])
+        self.assertEqual("", mercado_payload["评价数"])
+        self.assertEqual("", mercado_payload["评分"])
+
     def test_verify_existing_result_is_read_only_and_requires_fields_and_content(self):
         client = LarkBaseClient(runner=FakeRunner([]))
         task_value = sample_task()

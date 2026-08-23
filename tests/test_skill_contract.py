@@ -112,7 +112,8 @@ class SkillContractTests(unittest.TestCase):
             "Each detail has exactly `identity`, `status`, `reason`, `detail_url`, `product_id`, `title`",
             "Outcomes must be an exact prefix of that order",
             "`status` is `qualified` or `rejected`",
-            "unambiguous threshold-passing displays",
+            "SHEIN requires unambiguous review count and rating displays that pass their task thresholds; sold count is optional and never filters or ranks a SHEIN candidate",
+            "Mercado Libre requires an unambiguous product sold display that passes the task sold threshold; review count and rating are optional and never filter or rank a Mercado candidate",
             "any other proxy",
             "pause and preserve the checkpoint",
             "Never switch browsers to bypass CAPTCHA, login, authentication, or region walls",
@@ -231,6 +232,8 @@ class SkillContractTests(unittest.TestCase):
                 "`MLM`",
                 "`Patrocinado`",
                 "displayed product `vendidos`",
+                "only required filtering metric",
+                "Review count and rating are optional",
                 "`mil`",
                 "lower-bound",
                 "seller totals or followers",
@@ -242,7 +245,8 @@ class SkillContractTests(unittest.TestCase):
                 "`us.shein.com`",
                 "goods/product identity",
                 "`Sponsored` or `Ad`",
-                "product sold count",
+                "review count and rating are the only required filtering metrics",
+                "Sold count is optional",
                 "seller or store statistics",
                 "Best seller badge alone",
             ),
@@ -252,13 +256,13 @@ class SkillContractTests(unittest.TestCase):
             "reject/stop the card",
             "Search-result card metrics cannot replace detail-page verification",
             "A missing required metric rejects the candidate",
-            "ambiguous metrics",
+            "ambiguous required",
             "category drift",
             "identity change",
             "inaccessible imagery",
         )
         for path, required in contracts.items():
-            text = read(path)
+            text = " ".join(read(path).split())
             for clause in required + shared:
                 with self.subTest(path=path, clause=clause):
                     self.assertIn(clause, text)
@@ -291,6 +295,9 @@ class SkillContractTests(unittest.TestCase):
             "Do not browse",
             "write either Base",
             "claim numeric search volume",
+            "no visible sold count",
+            "245 reviews",
+            "4.8 rating",
         ):
             with self.subTest(stimulus=stimulus):
                 self.assertIn(stimulus, text)
@@ -373,6 +380,10 @@ class SkillContractTests(unittest.TestCase):
         ):
             with self.subTest(prohibited_behavior=prohibited_behavior):
                 self.assertIsNone(re.search(prohibited_behavior, response))
+        self.assertIn(
+            "missing sold count does not reject this SHEIN candidate",
+            response,
+        )
 
     def test_operational_references_document_live_safety_and_resource_limits(self):
         base = read("references/base-contract.md")

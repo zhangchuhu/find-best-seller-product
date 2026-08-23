@@ -132,6 +132,49 @@ class ObservationModelTests(unittest.TestCase):
 
 
 class VerifiedCandidateModelTests(unittest.TestCase):
+    def test_allows_only_platform_irrelevant_metrics_to_be_absent(self) -> None:
+        shein = valid_candidate()
+        shein.update({"sold_display": None, "sold_value": None})
+        self.assertIsNone(VerifiedCandidate.from_dict(shein).sold_value)
+
+        mercado = valid_candidate()
+        mercado.update({
+            "platform": Platform.MERCADO_MX,
+            "identity": "mercado-libre-mx:MLM123",
+            "canonical_url": "https://www.mercadolibre.com.mx/item-MLM123",
+            "reviews_display": None,
+            "reviews_value": None,
+            "rating_display": None,
+            "rating_value": None,
+        })
+        candidate = VerifiedCandidate.from_dict(mercado)
+        self.assertIsNone(candidate.reviews_value)
+        self.assertIsNone(candidate.rating_value)
+
+        for platform, missing in (
+            (Platform.SHEIN_US, ("reviews_display", "reviews_value")),
+            (Platform.SHEIN_US, ("rating_display", "rating_value")),
+            (Platform.MERCADO_MX, ("sold_display", "sold_value")),
+        ):
+            with self.subTest(platform=platform, missing=missing):
+                raw = valid_candidate()
+                raw["platform"] = platform
+                raw.update({field: None for field in missing})
+                with self.assertRaises((TypeError, ValueError)):
+                    VerifiedCandidate.from_dict(raw)
+
+    def test_metric_value_requires_a_visible_display(self) -> None:
+        for display, value in ((None, 1200),):
+            raw = valid_candidate()
+            raw.update({"sold_display": display, "sold_value": value})
+            with self.subTest(display=display, value=value):
+                with self.assertRaises((TypeError, ValueError)):
+                    VerifiedCandidate.from_dict(raw)
+
+        ignored = valid_candidate()
+        ignored.update({"sold_display": "Best seller", "sold_value": None})
+        self.assertEqual("Best seller", VerifiedCandidate.from_dict(ignored).sold_display)
+
     def test_direct_constructor_deep_freezes_sequences_and_enforces_invariants(self) -> None:
         raw = valid_candidate()
         raw["query_hits"] = {" blue dress ", "party dress"}
