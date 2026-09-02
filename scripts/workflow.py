@@ -30,12 +30,6 @@ from scripts.metrics import parse_count, parse_rating
 from scripts.models import Observation, Task, VerifiedCandidate
 from scripts.platforms import Platform, canonicalize_url, product_identity, route_platform
 from scripts.query_terms import MARKETPLACE_LANGUAGES, contains_color_or_size
-from scripts.screenshot_evidence import (
-    ScreenshotEvidenceError,
-    ScreenshotProof,
-    validate_region,
-    validate_screenshot_registry,
-)
 
 
 NEXT_STEP = (
@@ -45,7 +39,6 @@ NEXT_STEP = (
 )
 _DEFAULT_CLOCK = lambda: datetime.now(timezone.utc)
 MAX_EVIDENCE_JSON_BYTES = 5 * 1024 * 1024
-_SCREENSHOT_RECOLLECTION_ERROR = "screenshot-backed evidence must be recollected"
 _DETAIL_KEYS = {
     "identity", "status", "reason", "detail_url", "product_id", "title",
     "category", "sold_display", "reviews_display", "rating_display",
@@ -55,7 +48,6 @@ _OBSERVATION_KEYS = {
     "query", "rank", "is_ad", "title", "url", "product_id", "thumbnail_url",
 }
 _REJECTION_REASONS = {
-    "category_mismatch",
     "visual_structure_mismatch",
     "imagery_ambiguous_or_inaccessible",
     "metric_missing_or_ambiguous",
@@ -674,17 +666,13 @@ def _prepare_locked(selected, root, restart_analysis, lark, ark_client):
 def _detail_candidate(
     raw: object,
     merged: Mapping[str, object],
-    proofs: Mapping[str, ScreenshotProof],
     platform: Platform,
     task: Task,
     profile: VisualProfile,
-    *,
-    allow_historical_category_mismatch: bool = False,
 ) -> tuple[VerifiedCandidate | None, dict[str, object]]:
-    if not isinstance(raw, dict) or "evidence_refs" not in raw:
-        raise _error("screenshot evidence is invalid")
-    detail_value = _exact(raw, _DETAIL_KEYS | {"evidence_refs"}, "detail")
-    detail = {key: detail_value[key] for key in _DETAIL_KEYS}
+    if isinstance(raw, dict) and "evidence_refs" in raw:
+        raise _error("evidence schema is invalid")
+    detail = _exact(raw, _DETAIL_KEYS, "detail")
     identity = detail["identity"]
     if not isinstance(identity, str) or identity not in merged:
         raise _error("detail identity is not linked to observations")
@@ -699,38 +687,8 @@ def _detail_candidate(
             raise _error("qualified detail cannot have a rejection reason")
     elif not isinstance(reason, str) or reason not in _REJECTION_REASONS:
         raise _error("detail rejection reason is invalid")
-    if reason == "category_mismatch" and not allow_historical_category_mismatch:
-        raise _error(_SCREENSHOT_RECOLLECTION_ERROR)
-
     if reason == "category_mismatch":
-        required_purposes = {"visual"}
-    else:
-        required_purposes = {
-            None: {"visual", "metrics"},
-            "visual_structure_mismatch": {"visual"},
-            "imagery_ambiguous_or_inaccessible": {"visual"},
-            "metric_missing_or_ambiguous": {"metrics"},
-            "threshold_failure": {"metrics"},
-            "identity_changed": {"access_state"},
-            "detail_inaccessible": {"access_state"},
-        }[reason]
-    evidence_refs = detail_value["evidence_refs"]
-    if not isinstance(evidence_refs, list):
-        raise _error("screenshot evidence is invalid")
-    purposes = {
-        item.get("purpose") if isinstance(item, dict) else None
-        for item in evidence_refs
-    }
-    if not required_purposes <= purposes:
-        raise _error("screenshot evidence is invalid")
-    try:
-        for reference in evidence_refs:
-            validate_region(
-                reference, proofs, kind="detail", identity=identity,
-                purposes=purposes,
-            )
-    except ScreenshotEvidenceError:
-        raise _error("screenshot evidence is invalid") from None
+        raise _error("detail rejection reason is invalid")
 
     detail_url = detail["detail_url"]
     explicit_id = detail["product_id"]
@@ -790,22 +748,11 @@ def _detail_candidate(
         "rating_display": detail["rating_display"],
         "match_level": detail["match_level"],
         "visual_features": features,
-        "evidence_refs": [
-            {
-                "screenshot_id": reference["screenshot_id"],
-                "bbox": list(reference["bbox"]),
-                "purpose": reference["purpose"],
-            }
-            for reference in evidence_refs
-        ],
     }
 
     if status_value == "rejected":
         if detail["match_level"] is not None or detail["visual_features"] is not None:
             raise _error("rejected detail cannot contain match evidence")
-        if reason == "category_mismatch":
-            if normalized_url is None or title is None or category is None:
-                raise _error("legacy category rejection requires visible detail identity title and category")
         if reason in {"visual_structure_mismatch", "metric_missing_or_ambiguous", "threshold_failure"}:
             if normalized_url is None or title is None:
                 raise _error("detail rejection reason requires visible detail identity and title")
@@ -918,29 +865,21 @@ def _canonical_evidence_payload(
     resolved: Mapping[str, object],
     final_queries: tuple[str, str, str],
     record_id: str,
-    *,
-    allow_historical_category_mismatch: bool = False,
 ) -> dict[str, object]:
     """Replay product evidence into its only accepted normalized payload."""
     try:
         root_value = _exact(
             raw,
-            {"task_record_id", "platform", "screenshots", "queries", "details"},
+            {"task_record_id", "platform", "queries", "details"},
             "evidence",
         )
     except WorkflowError:
-        raise _error("screenshot evidence is invalid") from None
+        raise _error("evidence schema is invalid") from None
     task = Task.from_dict(prepared["task"])
     if root_value["task_record_id"] != record_id:
         raise _error("evidence task record does not match")
     if root_value["platform"] != task.platform.value:
         raise _error("evidence platform does not match")
-    try:
-        descriptors, screenshot_manifest, proofs = validate_screenshot_registry(
-            root_value["screenshots"], Path(run_dir), task.platform, final_queries,
-        )
-    except ScreenshotEvidenceError:
-        raise _error("screenshot evidence is invalid") from None
     query_values = root_value["queries"]
     expected_queries = list(final_queries)
     if not isinstance(query_values, list) or len(query_values) != 3:
@@ -960,20 +899,12 @@ def _canonical_evidence_payload(
                 raise _error("each query must contain 30-50 observations")
             parsed: list[Observation] = []
             for card in cards:
-                if not isinstance(card, dict) or "evidence_ref" not in card:
-                    raise _error("screenshot evidence is invalid")
-                card_value = _exact(
-                    card, _OBSERVATION_KEYS | {"evidence_ref"}, "observation",
-                )
-                value = Observation.from_dict({
-                    key: card_value[key] for key in _OBSERVATION_KEYS
-                })
+                if isinstance(card, dict) and "evidence_ref" in card:
+                    raise _error("evidence schema is invalid")
+                card_value = _exact(card, _OBSERVATION_KEYS, "observation")
+                value = Observation.from_dict(card_value)
                 if value.query != query:
                     raise _error("observation query does not match its block")
-                validate_region(
-                    card_value["evidence_ref"], proofs,
-                    kind="search", query=query,
-                )
                 if route_platform(value.url) is not task.platform:
                     raise _error("observation host does not match the platform")
                 if value.is_ad is None:
@@ -1000,22 +931,12 @@ def _canonical_evidence_payload(
             normalized_blocks.append({
                 "query": query,
                 "observations": [
-                    {
-                        **_observation_dict(value, task.platform),
-                        "evidence_ref": {
-                            "screenshot_id": card["evidence_ref"]["screenshot_id"],
-                            "bbox": list(card["evidence_ref"]["bbox"]),
-                        },
-                    }
-                    for value, card in sorted(
-                        zip(parsed, cards), key=lambda item: item[0].rank,
-                    )
+                    _observation_dict(value, task.platform)
+                    for value in sorted(parsed, key=lambda item: item.rank)
                 ],
             })
     except WorkflowError:
         raise
-    except ScreenshotEvidenceError:
-        raise _error("screenshot evidence is invalid") from None
     except (TypeError, ValueError):
         raise _error("observation evidence is invalid") from None
     if seen_queries != set(expected_queries):
@@ -1045,8 +966,7 @@ def _canonical_evidence_payload(
     qualifying_count = 0
     for index, raw_detail in enumerate(details):
         candidate, normalized = _detail_candidate(
-            raw_detail, merged, proofs, task.platform, task, profile,
-            allow_historical_category_mismatch=allow_historical_category_mismatch,
+            raw_detail, merged, task.platform, task, profile,
         )
         outcome_identity = normalized["identity"]
         if outcome_identity in detail_ids:
@@ -1068,7 +988,6 @@ def _canonical_evidence_payload(
         "evidence": {
             "task_record_id": record_id,
             "platform": task.platform.value,
-            "screenshots": descriptors,
             "queries": normalized_blocks,
             "details": normalized_details,
         },
@@ -1076,8 +995,6 @@ def _canonical_evidence_payload(
         "observation_count": len(observations),
         "recurring_count": len(recurring),
         "detail_count": len(details),
-        "screenshot_manifest": screenshot_manifest,
-        "screenshot_count": len(screenshot_manifest),
     }
     payload["evidence_digest"] = _canonical_evidence_digest(payload)
     return payload
@@ -1146,15 +1063,8 @@ def _validate_evidence_locked(run_dir, input_path, clock=None):
     )
 
 
-def _screenshot_backing_missing(evidence: object) -> bool:
-    return not (
-        isinstance(evidence, Mapping)
-        and {"screenshot_manifest", "screenshot_count"} <= set(evidence)
-    )
-
-
 def _validated_payload(
-    checkpoint: Mapping[str, object], run_dir: Path, *, historical_finalized: bool = False,
+    checkpoint: Mapping[str, object], run_dir: Path,
 ) -> tuple[Task, Path, list[VerifiedCandidate], dict[str, object]]:
     try:
         stages = checkpoint["stages"]
@@ -1162,27 +1072,20 @@ def _validated_payload(
         evidence = stages["evidence_validated"]
         if not isinstance(evidence, dict):
             raise ValueError
-        if _screenshot_backing_missing(evidence):
-            raise _error(_SCREENSHOT_RECOLLECTION_ERROR)
         resolved, final_queries = _queries_resolved_payload(
             checkpoint, checkpoint["record_id"], run_dir,
         )
         provenance_key, _expected_provenance = _resolution_provenance(resolved, final_queries)
-        if historical_finalized and checkpoint.get("stage") != "finalized":
-            raise ValueError
         allowed = {
             provenance_key, "evidence", "candidates",
             "observation_count", "recurring_count", "detail_count",
-            "screenshot_manifest", "screenshot_count",
             "evidence_digest", "validated_at", "write_progress",
         }
         legacy_digest_missing = "evidence_digest" not in evidence
         required = allowed - {"write_progress", "evidence_digest"}
         if not set(evidence).issubset(allowed) or not required <= set(evidence):
             raise ValueError
-        for count_key in (
-            "observation_count", "recurring_count", "detail_count", "screenshot_count",
-        ):
+        for count_key in ("observation_count", "recurring_count", "detail_count"):
             count_value = evidence[count_key]
             if type(count_value) is not int or count_value < 0:
                 raise ValueError
@@ -1192,14 +1095,10 @@ def _validated_payload(
         canonical = _canonical_evidence_payload(
             evidence["evidence"], run_dir, prepared, resolved, final_queries,
             checkpoint["record_id"],
-            allow_historical_category_mismatch=(
-                historical_finalized and provenance_key == "autocomplete_provenance"
-            ),
         )
         canonical_keys = {
             provenance_key, "evidence", "candidates",
             "observation_count", "recurring_count", "detail_count",
-            "screenshot_manifest", "screenshot_count",
             "evidence_digest",
         }
         compared_keys = canonical_keys - ({"evidence_digest"} if legacy_digest_missing else set())
@@ -1214,11 +1113,7 @@ def _validated_payload(
             raise ValueError
         candidates = [VerifiedCandidate.from_dict(item) for item in candidates_raw]
         return task, source, candidates, evidence
-    except WorkflowError as exc:
-        if str(exc) in {
-            "screenshot evidence is invalid", _SCREENSHOT_RECOLLECTION_ERROR,
-        }:
-            raise
+    except WorkflowError:
         raise _error("validated checkpoint is invalid") from None
     except (KeyError, TypeError, ValueError):
         raise _error("validated checkpoint is invalid") from None
@@ -1236,8 +1131,6 @@ def _migrate_legacy_evidence_digest_locked(
     evidence = stages.get("evidence_validated")
     if not isinstance(evidence, dict) or "evidence_digest" in evidence:
         return checkpoint
-    if _screenshot_backing_missing(evidence):
-        raise _error(_SCREENSHOT_RECOLLECTION_ERROR)
     _task, _source, _candidates, validated = _validated_payload(checkpoint, run_dir)
     resolved, final_queries = _queries_resolved_payload(
         checkpoint, checkpoint["record_id"], run_dir,
@@ -1246,7 +1139,6 @@ def _migrate_legacy_evidence_digest_locked(
     core_keys = {
         provenance_key, "evidence", "candidates",
         "observation_count", "recurring_count", "detail_count",
-        "screenshot_manifest", "screenshot_count",
     }
     migrated = dict(validated)
     migrated["evidence_digest"] = _canonical_evidence_digest(
@@ -1262,80 +1154,6 @@ def _migrate_legacy_evidence_digest_locked(
     return refreshed
 
 
-def _historical_screenshotless_payload(
-    checkpoint: Mapping[str, object], run_dir: Path,
-) -> tuple[Task, list[VerifiedCandidate], Mapping[str, object]]:
-    """Validate immutable pre-screenshot history without enabling a live replay."""
-    stages = checkpoint["stages"]
-    if not isinstance(stages, Mapping):
-        raise ValueError
-    prepared = _prepared_payload(checkpoint, checkpoint["record_id"], run_dir)
-    evidence = stages["evidence_validated"]
-    if not isinstance(evidence, Mapping) or not _screenshot_backing_missing(evidence):
-        raise ValueError
-    resolved, final_queries = _queries_resolved_payload(
-        checkpoint, checkpoint["record_id"], run_dir,
-    )
-    provenance_key, _expected = _resolution_provenance(resolved, final_queries)
-    core_keys = {
-        provenance_key, "evidence", "candidates",
-        "observation_count", "recurring_count", "detail_count",
-    }
-    allowed = core_keys | {"evidence_digest", "validated_at", "write_progress"}
-    if (
-        not (core_keys | {"validated_at"}) <= set(evidence)
-        or not set(evidence) <= allowed
-    ):
-        raise ValueError
-    for count_key in ("observation_count", "recurring_count", "detail_count"):
-        if type(evidence[count_key]) is not int or evidence[count_key] < 0:
-            raise ValueError
-    root_value = _exact(
-        evidence["evidence"],
-        {"task_record_id", "platform", "queries", "details"},
-        "historical evidence",
-    )
-    if (
-        root_value["task_record_id"] != checkpoint["record_id"]
-        or root_value["platform"] != prepared["task"]["platform"]
-        or not isinstance(root_value["queries"], list)
-        or not isinstance(root_value["details"], list)
-    ):
-        raise ValueError
-    if any(
-        not isinstance(block, Mapping)
-        or not isinstance(block.get("observations"), list)
-        or any(
-            not isinstance(card, Mapping) or "evidence_ref" in card
-            for card in block["observations"]
-        )
-        for block in root_value["queries"]
-    ) or any(
-        not isinstance(detail, Mapping) or "evidence_refs" in detail
-        for detail in root_value["details"]
-    ):
-        raise ValueError
-    _validated_resolution_provenance(
-        evidence, checkpoint, checkpoint["record_id"], run_dir,
-    )
-    digest = evidence.get("evidence_digest")
-    if digest is not None:
-        if (
-            not isinstance(digest, str)
-            or len(digest) != 64
-            or digest != _canonical_evidence_digest({
-                key: evidence[key] for key in core_keys
-            })
-        ):
-            raise ValueError
-    task = Task.from_dict(prepared["task"])
-    candidates_raw = evidence["candidates"]
-    if not isinstance(candidates_raw, list):
-        raise ValueError
-    candidates = [VerifiedCandidate.from_dict(item) for item in candidates_raw]
-    return task, candidates, evidence
-
-
 def _v2_finalized_summary(
     checkpoint: Mapping[str, object], run_dir: Path,
 ) -> str | None:
@@ -1349,14 +1167,9 @@ def _v2_finalized_summary(
         evidence = stages["evidence_validated"]
         if not isinstance(evidence, Mapping):
             raise ValueError
-        if _screenshot_backing_missing(evidence):
-            task, candidates, validated = _historical_screenshotless_payload(
-                checkpoint, run_dir,
-            )
-        else:
-            task, _source, candidates, validated = _validated_payload(
-                checkpoint, run_dir, historical_finalized=True,
-            )
+        task, _source, candidates, validated = _validated_payload(
+            checkpoint, run_dir,
+        )
         selected = select_results(task, candidates)
         intended = [
             json.dumps(
@@ -1673,13 +1486,6 @@ def finalize(
             finalized = _v2_finalized_summary(existing, absolute_run)
             if finalized is not None:
                 return finalized
-        stages = existing.get("stages")
-        evidence = stages.get("evidence_validated") if isinstance(stages, Mapping) else None
-        if (
-            existing.get("stage") == "evidence_validated"
-            and _screenshot_backing_missing(evidence)
-        ):
-            raise _error(_SCREENSHOT_RECOLLECTION_ERROR)
     arguments = {
         "dry_run": dry_run,
         "lark_client": lark_client,

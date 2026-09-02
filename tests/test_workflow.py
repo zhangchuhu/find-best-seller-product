@@ -8,7 +8,6 @@ import json
 import multiprocessing
 import os
 from pathlib import Path
-import struct
 import subprocess
 import sys
 import tempfile
@@ -16,7 +15,6 @@ import threading
 import time
 import unittest
 from unittest.mock import patch
-import zlib
 
 from scripts.ark_vision import VisualProfile
 from scripts.checkpoint import CheckpointError, CheckpointStore
@@ -37,25 +35,6 @@ from scripts.workflow import (
 
 ROOT = Path(__file__).resolve().parents[1]
 FIXTURES = ROOT / "tests" / "fixtures"
-
-
-def png_chunk(kind: bytes, data: bytes) -> bytes:
-    checksum = zlib.crc32(kind + data) & 0xFFFFFFFF
-    return struct.pack(">I", len(data)) + kind + data + struct.pack(">I", checksum)
-
-
-def complete_png_bytes(width: int = 1000, height: int = 800) -> bytes:
-    raw = b"".join(b"\x00" + b"\x00\x00\x00\x00" * width for _ in range(height))
-    return (
-        b"\x89PNG\r\n\x1a\n"
-        + png_chunk(b"IHDR", struct.pack(">IIBBBBB", width, height, 8, 6, 0, 0, 0))
-        + png_chunk(b"IDAT", zlib.compress(raw, 9))
-        + png_chunk(b"IEND", b"")
-    )
-
-
-SCREENSHOT_PNG = complete_png_bytes()
-SCREENSHOT_SHA256 = "dc3dbb5747c422ff1aafdc03cd31df676d325d6e2f02e8e4e5e06efdf18bca2e"
 
 
 def task(platform: Platform = Platform.SHEIN_US, limit: int = 2) -> Task:
@@ -213,33 +192,6 @@ def load_fixture(name: str) -> dict[str, object]:
     return json.loads((FIXTURES / name).read_text(encoding="utf-8"))
 
 
-def attach_screenshot_proof(value: dict[str, object], run_dir: Path) -> None:
-    """Materialize only the deterministic screenshots declared by a fixture."""
-    screenshots = value.get("screenshots")
-    if not isinstance(screenshots, list):
-        return
-    if hashlib.sha256(SCREENSHOT_PNG).hexdigest() != SCREENSHOT_SHA256:
-        raise AssertionError("deterministic screenshot digest changed")
-    screenshot_dir = run_dir / "screenshots"
-    screenshot_dir.mkdir(parents=True, exist_ok=True)
-    for descriptor in screenshots:
-        if not isinstance(descriptor, dict):
-            raise AssertionError("fixture screenshot descriptor is invalid")
-        relative_path = descriptor.get("file")
-        if descriptor.get("sha256") != SCREENSHOT_SHA256:
-            raise AssertionError("fixture screenshot digest is not deterministic")
-        if (
-            not isinstance(relative_path, str)
-            or not relative_path.startswith("screenshots/")
-            or "/" in relative_path.removeprefix("screenshots/")
-        ):
-            raise AssertionError("fixture screenshot path is invalid")
-        target = run_dir / relative_path
-        target.write_bytes(SCREENSHOT_PNG)
-        if hashlib.sha256(target.read_bytes()).hexdigest() != SCREENSHOT_SHA256:
-            raise AssertionError("written screenshot digest changed")
-
-
 def write_evidence(root: Path, value: dict[str, object], name: str) -> Path:
     path = root / name
     path.write_text(json.dumps(value, ensure_ascii=False), encoding="utf-8")
@@ -247,9 +199,7 @@ def write_evidence(root: Path, value: dict[str, object], name: str) -> Path:
 
 
 def load_evidence(root: Path, name: str) -> dict[str, object]:
-    value = load_fixture(name)
-    attach_screenshot_proof(value, root / "rec_source")
-    return value
+    return load_fixture(name)
 
 
 def recompute_evidence_digest(evidence: dict[str, object]) -> None:
@@ -261,8 +211,6 @@ def recompute_evidence_digest(evidence: dict[str, object]) -> None:
         provenance_key, "evidence", "candidates",
         "observation_count", "recurring_count", "detail_count",
     }
-    if {"screenshot_manifest", "screenshot_count"} <= set(evidence):
-        core_keys |= {"screenshot_manifest", "screenshot_count"}
     encoded = json.dumps(
         {key: evidence[key] for key in core_keys},
         ensure_ascii=False, sort_keys=True, separators=(",", ":"), allow_nan=False,
@@ -270,22 +218,8 @@ def recompute_evidence_digest(evidence: dict[str, object]) -> None:
     evidence["evidence_digest"] = hashlib.sha256(encoded).hexdigest()
 
 
-def strip_screenshot_backing(checkpoint: dict[str, object]) -> None:
-    evidence = checkpoint["stages"]["evidence_validated"]
-    evidence["evidence"].pop("screenshots")
-    for block in evidence["evidence"]["queries"]:
-        for observation in block["observations"]:
-            observation.pop("evidence_ref")
-    for detail in evidence["evidence"]["details"]:
-        detail.pop("evidence_refs")
-    evidence.pop("screenshot_manifest")
-    evidence.pop("screenshot_count")
-    recompute_evidence_digest(evidence)
-
-
 def evidence_fixture(root: Path, name: str) -> Path:
     value = load_fixture(name)
-    attach_screenshot_proof(value, root / "rec_source")
     return write_evidence(root, value, name)
 
 
@@ -445,162 +379,73 @@ class EvidenceValidationTests(unittest.TestCase):
                     evidence = loaded["stages"]["evidence_validated"]
                     self.assertEqual(2, evidence["recurring_count"])
                     self.assertEqual(2, len(evidence["candidates"]))
+                    self.assertEqual(
+                        {"task_record_id", "platform", "queries", "details"},
+                        set(evidence["evidence"]),
+                    )
+                    self.assertNotIn("screenshot_manifest", evidence)
+                    self.assertNotIn("screenshot_count", evidence)
                 finally:
                     context.cleanup()
 
-    def test_fixed_screenshot_png_contains_every_declared_rgba_scanline(self):
-        offset = 8
-        width = height = None
-        image_data = bytearray()
-        while offset < len(SCREENSHOT_PNG):
-            length = int.from_bytes(SCREENSHOT_PNG[offset:offset + 4], "big")
-            kind = SCREENSHOT_PNG[offset + 4:offset + 8]
-            data = SCREENSHOT_PNG[offset + 8:offset + 8 + length]
-            if kind == b"IHDR":
-                width = int.from_bytes(data[:4], "big")
-                height = int.from_bytes(data[4:8], "big")
-            elif kind == b"IDAT":
-                image_data.extend(data)
-            offset += 12 + length
-        self.assertEqual((1000, 800), (width, height))
-        self.assertEqual(height * (1 + width * 4), len(zlib.decompress(image_data)))
+    def test_validate_rejects_every_screenshot_era_evidence_field(self):
+        mutations = {
+            "root screenshots": lambda value: value.update({"screenshots": []}),
+            "observation evidence_ref": lambda value: value["queries"][0]["observations"][0].update({
+                "evidence_ref": {"screenshot_id": "old", "bbox": [0, 0, 1, 1]},
+            }),
+            "detail evidence_refs": lambda value: value["details"][0].update({
+                "evidence_refs": [{"purpose": "visual", "screenshot_id": "old", "bbox": [0, 0, 1, 1]}],
+            }),
+        }
+        for label, mutate in mutations.items():
+            with self.subTest(case=label), tempfile.TemporaryDirectory() as directory:
+                root = Path(directory)
+                prepare_only(root)
+                value = load_evidence(root, "shein-evidence.json")
+                mutate(value)
+                path = write_evidence(root, value, "screenshot-era.json")
+                with self.assertRaisesRegex(WorkflowError, "evidence schema is invalid"):
+                    validate_evidence(root / "rec_source", path, clock=frozen_clock())
 
-    def test_screenshot_backed_legacy_category_reason_requires_recollection(self):
+    def test_category_mismatch_rejection_is_not_supported(self):
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
             prepare_only(root)
-            checkpoint_path = root / "rec_source" / "checkpoint.json"
-            checkpoint = json.loads(checkpoint_path.read_text(encoding="utf-8"))
-            checkpoint["stage"] = "prepared"
-            checkpoint["stages"].pop("queries_resolved")
-            checkpoint_path.write_text(json.dumps(checkpoint), encoding="utf-8")
-            resolve_queries(root / "rec_source", FIXTURES / "shein-autocomplete.json")
             value = load_evidence(root, "shein-evidence.json")
             value["details"][0].update({
                 "status": "rejected", "reason": "category_mismatch",
                 "category": "shoes", "match_level": None,
                 "visual_features": None,
             })
-            path = write_evidence(root, value, "legacy-category.json")
-            with self.assertRaisesRegex(
-                WorkflowError, "screenshot-backed evidence must be recollected",
-            ):
+            path = write_evidence(root, value, "category-mismatch.json")
+            with self.assertRaisesRegex(WorkflowError, "detail rejection reason is invalid"):
                 validate_evidence(root / "rec_source", path, clock=frozen_clock())
 
-    def test_validate_requires_screenshot_root_and_observation_reference(self):
-        mutations = {
-            "missing screenshot root": lambda value: value.pop("screenshots"),
-            "missing observation reference": lambda value: value["queries"][0]["observations"][0].pop("evidence_ref"),
-        }
-        for label, mutate in mutations.items():
-            with self.subTest(case=label), tempfile.TemporaryDirectory() as directory:
-                root = Path(directory)
-                prepare_only(root)
-                value = load_evidence(root, "shein-evidence.json")
-                mutate(value)
-                path = write_evidence(root, value, "missing-screenshot-evidence.json")
-                with self.assertRaisesRegex(WorkflowError, "screenshot evidence is invalid"):
-                    validate_evidence(root / "rec_source", path, clock=frozen_clock())
-
-    def test_screenshot_schema_and_regions_are_exactly_bound(self):
-        mutations = {
-            "unknown root key": lambda value: value.update({"unexpected": True}),
-            "unknown screenshot key": lambda value: value["screenshots"][0].update({"unexpected": True}),
-            "search screenshot bound to another query": lambda value: value["screenshots"][0].update({
-                "query": value["queries"][1]["query"],
-            }),
-            "detail screenshot bound to another identity and URL": lambda value: value["screenshots"][3].update({
-                "identity": value["details"][1]["identity"],
-                "page_url": value["details"][1]["detail_url"],
-            }),
-            "out-of-bounds observation box": lambda value: value["queries"][0]["observations"][0]["evidence_ref"].update({
-                "bbox": [0, 0, 1001, 20],
-            }),
-        }
-        for label, mutate in mutations.items():
-            with self.subTest(case=label), tempfile.TemporaryDirectory() as directory:
-                root = Path(directory)
-                prepare_only(root)
-                value = load_evidence(root, "shein-evidence.json")
-                mutate(value)
-                path = write_evidence(root, value, "invalid-screenshot-binding.json")
-                with self.assertRaisesRegex(WorkflowError, "screenshot evidence is invalid"):
-                    validate_evidence(root / "rec_source", path, clock=frozen_clock())
-
-    def test_qualified_detail_requires_visual_and_metrics_screenshot_purposes(self):
-        mutations = {
-            "qualified missing visual": lambda value: value["details"][0].update({
-                "evidence_refs": [value["details"][0]["evidence_refs"][1]],
-            }),
-            "qualified missing metrics": lambda value: value["details"][0].update({
-                "evidence_refs": [value["details"][0]["evidence_refs"][0]],
-            }),
-            "visual mismatch with only metrics": lambda value: value["details"][0].update({
-                "status": "rejected", "reason": "visual_structure_mismatch",
-                "match_level": None, "visual_features": None,
-                "evidence_refs": [value["details"][0]["evidence_refs"][1]],
-            }),
-            "threshold failure with only visual": lambda value: value["details"][0].update({
-                "status": "rejected", "reason": "threshold_failure",
-                "reviews_display": "1", "match_level": None, "visual_features": None,
-                "evidence_refs": [value["details"][0]["evidence_refs"][0]],
-            }),
-            "identity change without access-state": lambda value: value["details"][0].update({
-                "status": "rejected", "reason": "identity_changed",
-                "detail_url": "https://us.shein.com/changed-p-999999.html",
-                "product_id": "999999", "match_level": None, "visual_features": None,
-            }),
-            "unknown purpose": lambda value: value["details"][0]["evidence_refs"][0].update({
-                "purpose": "title",
-            }),
-        }
-        for label, mutate in mutations.items():
-            with self.subTest(case=label), tempfile.TemporaryDirectory() as directory:
-                root = Path(directory)
-                prepare_only(root)
-                value = load_evidence(root, "shein-evidence.json")
-                mutate(value)
-                path = write_evidence(root, value, "invalid-detail-purpose.json")
-                with self.assertRaisesRegex(WorkflowError, "screenshot evidence is invalid"):
-                    validate_evidence(root / "rec_source", path, clock=frozen_clock())
-
-    def test_detail_screenshot_purpose_matrix_accepts_each_reason(self):
-        def refs(value, *purposes):
-            by_purpose = {
-                item["purpose"]: item for item in value["details"][0]["evidence_refs"]
-            }
-            access_state = {
-                **by_purpose["visual"],
-                "purpose": "access_state",
-            }
-            by_purpose["access_state"] = access_state
-            return [copy.deepcopy(by_purpose[purpose]) for purpose in purposes]
-
-        def reject(value, reason, purposes):
-            detail = value["details"][0]
-            detail.update({
+    def test_detail_outcome_matrix_accepts_each_reason(self):
+        def reject(value, reason):
+            value["details"][0].update({
                 "status": "rejected", "reason": reason,
                 "match_level": None, "visual_features": None,
-                "evidence_refs": refs(value, *purposes),
             })
 
         def metric_missing(value):
-            reject(value, "metric_missing_or_ambiguous", ("metrics",))
+            reject(value, "metric_missing_or_ambiguous")
             value["details"][0]["reviews_display"] = None
 
         def threshold_failure(value):
-            reject(value, "threshold_failure", ("metrics",))
+            reject(value, "threshold_failure")
             value["details"][0]["reviews_display"] = "1"
 
         def identity_changed(value):
-            reject(value, "identity_changed", ("access_state",))
+            reject(value, "identity_changed")
             value["details"][0].update({
                 "detail_url": "https://us.shein.com/changed-p-999999.html",
                 "product_id": "999999",
             })
 
         def inaccessible(value):
-            reject(value, "detail_inaccessible", ("access_state",))
+            reject(value, "detail_inaccessible")
             value["details"][0].update({
                 "detail_url": None, "product_id": None, "title": None,
                 "category": None, "sold_display": None, "reviews_display": None,
@@ -609,8 +454,8 @@ class EvidenceValidationTests(unittest.TestCase):
 
         cases = {
             "qualified": lambda value: None,
-            "visual structure mismatch": lambda value: reject(value, "visual_structure_mismatch", ("visual",)),
-            "imagery inaccessible": lambda value: reject(value, "imagery_ambiguous_or_inaccessible", ("visual",)),
+            "visual structure mismatch": lambda value: reject(value, "visual_structure_mismatch"),
+            "imagery inaccessible": lambda value: reject(value, "imagery_ambiguous_or_inaccessible"),
             "metric missing": metric_missing,
             "threshold failure": threshold_failure,
             "identity changed": identity_changed,
@@ -622,10 +467,10 @@ class EvidenceValidationTests(unittest.TestCase):
                 prepare_only(root)
                 value = load_evidence(root, "shein-evidence.json")
                 mutate(value)
-                path = write_evidence(root, value, "purpose-matrix.json")
+                path = write_evidence(root, value, "outcome-matrix.json")
                 validate_evidence(root / "rec_source", path, clock=frozen_clock())
 
-    def test_screenshot_proof_preserves_candidate_values_and_ordering(self):
+    def test_dom_evidence_preserves_candidate_values_and_ordering(self):
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
             prepare_only(root)
@@ -634,8 +479,6 @@ class EvidenceValidationTests(unittest.TestCase):
                 clock=frozen_clock(),
             )
             validated = CheckpointStore(root).load("rec_source")["stages"]["evidence_validated"]
-            self.assertEqual(5, validated["screenshot_count"])
-            self.assertEqual(5, len(validated["screenshot_manifest"]))
             self.assertEqual(
                 ["shein-us:100001", "shein-us:100002"],
                 [candidate["identity"] for candidate in validated["candidates"]],
@@ -993,7 +836,7 @@ class EvidenceValidationTests(unittest.TestCase):
             })
             path = write_evidence(root, value, "legacy-category-reason.json")
 
-            with self.assertRaisesRegex(WorkflowError, "screenshot-backed evidence must be recollected"):
+            with self.assertRaisesRegex(WorkflowError, "detail rejection reason is invalid"):
                 validate_evidence(root / "rec_source", path, clock=frozen_clock())
 
     def test_exhaustive_rejected_outcomes_allow_a_complete_zero_result(self):
@@ -1030,10 +873,6 @@ class EvidenceValidationTests(unittest.TestCase):
                 "product_id": "999999",
                 "match_level": None,
                 "visual_features": None,
-                "evidence_refs": [{
-                    **value["details"][0]["evidence_refs"][0],
-                    "purpose": "access_state",
-                }],
             })
             value["details"][1].update({
                 "status": "rejected",
@@ -1047,10 +886,6 @@ class EvidenceValidationTests(unittest.TestCase):
                 "rating_display": None,
                 "match_level": None,
                 "visual_features": None,
-                "evidence_refs": [{
-                    **value["details"][1]["evidence_refs"][0],
-                    "purpose": "access_state",
-                }],
             })
             path = write_evidence(root, value, "rejected.json")
             validate_evidence(root / "rec_source", path, clock=frozen_clock())
@@ -1368,48 +1203,7 @@ class QueryResolutionTests(unittest.TestCase):
             self.assertIn("Already finalized 1", finalize(run_dir, lark_client=FakeLark()))
 
 
-class LegacyScreenshotEvidenceTests(unittest.TestCase):
-    def _screenshotless_checkpoint(
-        self, root: Path, *, finalized: bool,
-    ) -> tuple[Path, Path, Path]:
-        prepare_run(root)
-        validate_evidence(
-            root / "rec_source", evidence_fixture(root, "shein-evidence.json"),
-            clock=frozen_clock(),
-        )
-        run_dir = root / "rec_source"
-        if finalized:
-            finalize(run_dir, lark_client=FakeLark(), clock=frozen_clock())
-        checkpoint_path = run_dir / "checkpoint.json"
-        checkpoint = json.loads(checkpoint_path.read_text(encoding="utf-8"))
-        strip_screenshot_backing(checkpoint)
-        checkpoint_path.write_text(json.dumps(checkpoint), encoding="utf-8")
-        lock_path = run_dir / ".finalize.lock"
-        if lock_path.exists():
-            lock_path.unlink()
-        return run_dir, checkpoint_path, run_dir / "final-results.json"
-
-    def test_screenshotless_evidence_validated_requires_recollection_without_side_effects(self):
-        for dry_run in (True, False):
-            with self.subTest(dry_run=dry_run), tempfile.TemporaryDirectory() as directory:
-                root = Path(directory)
-                run_dir, checkpoint_path, results_path = self._screenshotless_checkpoint(
-                    root, finalized=False,
-                )
-                before_checkpoint = checkpoint_path.read_bytes()
-                lark = FakeLark()
-                with self.assertRaisesRegex(
-                    WorkflowError, "screenshot-backed evidence must be recollected",
-                ):
-                    finalize(
-                        run_dir, dry_run=dry_run, lark_client=lark,
-                        clock=frozen_clock(),
-                    )
-                self.assertEqual([], lark.events)
-                self.assertEqual(before_checkpoint, checkpoint_path.read_bytes())
-                self.assertFalse(results_path.exists())
-                self.assertFalse((run_dir / ".finalize.lock").exists())
-
+class CheckpointStageTests(unittest.TestCase):
     def test_prepared_and_queries_resolved_stages_keep_resume_instruction(self):
         for stage in ("prepared", "queries_resolved"):
             for dry_run in (True, False):
@@ -1427,98 +1221,30 @@ class LegacyScreenshotEvidenceTests(unittest.TestCase):
                         finalize(run_dir, dry_run=dry_run, lark_client=FakeLark())
                     self.assertEqual(NEXT_STEP, str(raised.exception))
 
-    def test_screenshotless_finalized_checkpoint_remains_read_only_history(self):
+    def test_dom_only_finalized_checkpoint_remains_read_only(self):
         for dry_run in (True, False):
             with self.subTest(dry_run=dry_run), tempfile.TemporaryDirectory() as directory:
                 root = Path(directory)
-                run_dir, checkpoint_path, results_path = self._screenshotless_checkpoint(
-                    root, finalized=True,
-                )
-                for target in (run_dir / "screenshots").iterdir():
-                    target.unlink()
-                (run_dir / "screenshots").rmdir()
-                before_checkpoint = checkpoint_path.read_bytes()
-                before_results = results_path.read_bytes()
-                lark = FakeLark()
-                summary = finalize(
-                    run_dir, dry_run=dry_run, lark_client=lark,
-                    clock=frozen_clock(),
-                )
-                self.assertIn("Already finalized 2", summary)
-                self.assertEqual([], lark.events)
-                self.assertEqual(before_checkpoint, checkpoint_path.read_bytes())
-                self.assertEqual(before_results, results_path.read_bytes())
-                self.assertFalse((run_dir / ".finalize.lock").exists())
-
-    def test_finalized_legacy_autocomplete_category_mismatch_remains_read_only_history(self):
-        for dry_run in (True, False):
-            with self.subTest(dry_run=dry_run), tempfile.TemporaryDirectory() as directory:
-                root = Path(directory)
-                prepare_only(root)
+                prepare_run(root)
                 run_dir = root / "rec_source"
-                checkpoint_path = run_dir / "checkpoint.json"
-                checkpoint = json.loads(checkpoint_path.read_text(encoding="utf-8"))
-                checkpoint["stage"] = "prepared"
-                checkpoint["stages"].pop("queries_resolved")
-                checkpoint_path.write_text(json.dumps(checkpoint), encoding="utf-8")
-                resolve_queries(run_dir, FIXTURES / "shein-autocomplete.json")
                 validate_evidence(
                     run_dir, evidence_fixture(root, "shein-evidence.json"),
                     clock=frozen_clock(),
                 )
                 finalize(run_dir, lark_client=FakeLark(), clock=frozen_clock())
-
-                checkpoint = json.loads(checkpoint_path.read_text(encoding="utf-8"))
-                evidence = checkpoint["stages"]["evidence_validated"]
-                rejected_identity = evidence["evidence"]["details"][0]["identity"]
-                evidence["evidence"]["details"][0].update({
-                    "status": "rejected",
-                    "reason": "category_mismatch",
-                    "match_level": None,
-                    "visual_features": None,
-                })
-                evidence["candidates"] = [
-                    candidate for candidate in evidence["candidates"]
-                    if candidate["identity"] != rejected_identity
-                ]
-                recompute_evidence_digest(evidence)
-                candidate = evidence["candidates"][0]
-                prepared_task = checkpoint["stages"]["prepared"]["task"]
-                business_key = json.dumps(
-                    [prepared_task["sku"], prepared_task["platform"], candidate["canonical_url"]],
-                    ensure_ascii=False, separators=(",", ":"),
-                )
-                evidence["write_progress"] = {
-                    "intended": [business_key],
-                    "completed": [business_key],
-                    "writes_complete": True,
-                }
-                checkpoint["stages"]["finalized"] = {
-                    "result_count": 1,
-                    "completed": [business_key],
-                }
-                checkpoint_path.write_text(json.dumps(checkpoint), encoding="utf-8")
+                checkpoint_path = run_dir / "checkpoint.json"
                 results_path = run_dir / "final-results.json"
-                results_path.write_text(json.dumps({
-                    "task_record_id": prepared_task["record_id"],
-                    "platform": prepared_task["platform"],
-                    "result_count": 1,
-                    "results": [candidate],
-                }), encoding="utf-8")
                 (run_dir / ".finalize.lock").unlink(missing_ok=True)
-
                 before_checkpoint = checkpoint_path.read_bytes()
                 before_results = results_path.read_bytes()
                 lark = FakeLark()
-                with patch(
-                    "scripts.workflow._record_lock",
-                    side_effect=AssertionError("historical finalization must not lock"),
-                ):
-                    summary = finalize(
-                        run_dir, dry_run=dry_run, lark_client=lark,
-                        clock=frozen_clock(),
-                    )
-                self.assertIn("Already finalized 1", summary)
+
+                summary = finalize(
+                    run_dir, dry_run=dry_run, lark_client=lark,
+                    clock=frozen_clock(),
+                )
+
+                self.assertIn("Already finalized 2", summary)
                 self.assertEqual([], lark.events)
                 self.assertEqual(before_checkpoint, checkpoint_path.read_bytes())
                 self.assertEqual(before_results, results_path.read_bytes())
@@ -1532,65 +1258,6 @@ class FinalizeTests(unittest.TestCase):
             root / "rec_source", evidence_fixture(root, "shein-evidence.json"),
             clock=frozen_clock(),
         )
-
-    def _assert_screenshot_tamper_rejected(self, mutate, *, dry_run: bool) -> None:
-        with tempfile.TemporaryDirectory() as directory:
-            root = Path(directory)
-            self._validated(root)
-            run_dir = root / "rec_source"
-            target = next((run_dir / "screenshots").iterdir())
-            mutate(run_dir, target)
-            lark = FakeLark()
-            with self.assertRaisesRegex(WorkflowError, "screenshot evidence is invalid"):
-                finalize(
-                    run_dir, dry_run=dry_run, lark_client=lark,
-                    clock=frozen_clock(),
-                )
-            self.assertEqual([], lark.events)
-            self.assertFalse((run_dir / "final-results.json").exists())
-
-    def test_finalize_rejects_deleted_screenshot_before_output_or_base_calls(self):
-        for dry_run in (True, False):
-            with self.subTest(dry_run=dry_run):
-                self._assert_screenshot_tamper_rejected(
-                    lambda _run_dir, target: target.unlink(), dry_run=dry_run,
-                )
-
-    def test_finalize_revalidates_before_default_lark_client_construction(self):
-        with tempfile.TemporaryDirectory() as directory:
-            root = Path(directory)
-            self._validated(root)
-            run_dir = root / "rec_source"
-            next((run_dir / "screenshots").iterdir()).unlink()
-            with patch(
-                "scripts.workflow.LarkBaseClient",
-                side_effect=AssertionError("Lark client must not be constructed"),
-            ):
-                with self.assertRaisesRegex(WorkflowError, "screenshot evidence is invalid"):
-                    finalize(run_dir, clock=frozen_clock())
-            self.assertFalse((run_dir / "final-results.json").exists())
-
-    def test_finalize_rejects_replaced_symlinked_and_dimension_changed_screenshots(self):
-        def same_size_replacement(_run_dir, target):
-            target.write_bytes(b"x" * target.stat().st_size)
-
-        def symlink_substitution(run_dir, target):
-            outside = run_dir / "outside.png"
-            outside.write_bytes(target.read_bytes())
-            target.unlink()
-            os.symlink(outside, target)
-
-        def changed_dimensions(_run_dir, target):
-            target.write_bytes(complete_png_bytes(999, 800))
-
-        for label, mutate in (
-            ("same-size replacement", same_size_replacement),
-            ("symlink substitution", symlink_substitution),
-            ("changed dimensions", changed_dimensions),
-        ):
-            for dry_run in (True, False):
-                with self.subTest(case=label, dry_run=dry_run):
-                    self._assert_screenshot_tamper_rejected(mutate, dry_run=dry_run)
 
     def _digestless_finalized_one(self, root: Path) -> tuple[Path, Path, Path]:
         """Build a valid pre-digest finalized v2 run with one selected result."""

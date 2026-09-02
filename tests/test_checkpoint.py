@@ -23,8 +23,6 @@ def evidence_payload(**changes: object) -> dict[str, object]:
         "observation_count": 90,
         "recurring_count": 2,
         "detail_count": 2,
-        "screenshot_manifest": [{"id": "proof-1"}],
-        "screenshot_count": 1,
         "evidence_digest": "a" * 64,
         "validated_at": "2026-08-21T10:00:00Z",
     }
@@ -107,8 +105,6 @@ class CheckpointBehaviorTests(unittest.TestCase):
             "observation_count": 90,
             "recurring_count": 2,
             "detail_count": 2,
-            "screenshot_manifest": [{"id": "proof-1"}],
-            "screenshot_count": 1,
             "evidence_digest": "a" * 64,
         }
         initial = {**core, "validated_at": "2026-08-21T10:00:00Z"}
@@ -140,8 +136,6 @@ class CheckpointBehaviorTests(unittest.TestCase):
             "observation_count": 90,
             "recurring_count": 2,
             "detail_count": 2,
-            "screenshot_manifest": [{"id": "proof-1"}],
-            "screenshot_count": 1,
             "evidence_digest": "a" * 64,
         }
         self.store.save_stage(
@@ -156,88 +150,51 @@ class CheckpointBehaviorTests(unittest.TestCase):
             },
         )
 
-    def test_historical_screenshotless_evidence_is_loadable_but_read_only(self) -> None:
-        self.store.save_stage("recLegacyEvidence1", "prepared", {"prepared": True})
+    def test_new_evidence_stage_accepts_dom_only_core(self) -> None:
+        self.store.save_stage("recDomEvidence1", "prepared", {"prepared": True})
         self.store.save_stage(
-            "recLegacyEvidence1", "queries_resolved",
+            "recDomEvidence1", "queries_resolved",
             {"source": "ark_seeds", "queries": ["one", "two", "three"]},
         )
-        screenshotless = {
-            "query_provenance": {
-                "source": "ark_seeds", "queries": ["one", "two", "three"],
-            },
-            "evidence": {"queries": []},
-            "candidates": [],
-            "observation_count": 90,
-            "recurring_count": 2,
-            "detail_count": 2,
-            "evidence_digest": "a" * 64,
-            "validated_at": "2026-08-21T10:00:00Z",
-        }
-        checkpoint_path = self.root / "recLegacyEvidence1" / "checkpoint.json"
-        checkpoint_path.write_text(json.dumps({
-            "record_id": "recLegacyEvidence1",
+        payload = evidence_payload()
+
+        self.store.save_stage("recDomEvidence1", "evidence_validated", payload)
+
+        loaded = self.store.load("recDomEvidence1")
+        assert loaded is not None
+        self.assertEqual(payload, loaded["stages"]["evidence_validated"])
+
+    def test_screenshot_era_checkpoint_fields_are_rejected_on_save_and_load(self) -> None:
+        for index, removed_key in enumerate(("screenshot_manifest", "screenshot_count"), start=1):
+            with self.subTest(removed_key=removed_key):
+                record_id = f"recScreenshotEra{index}"
+                self.store.save_stage(record_id, "prepared", {"prepared": True})
+                self.store.save_stage(
+                    record_id, "queries_resolved",
+                    {"source": "ark_seeds", "queries": ["one", "two", "three"]},
+                )
+                payload = evidence_payload(**{removed_key: [] if removed_key.endswith("manifest") else 0})
+                with self.assertRaises(CheckpointError):
+                    self.store.save_stage(record_id, "evidence_validated", payload)
+
+        record_id = "recLoadedScreenshotEra"
+        path = self.root / record_id / "checkpoint.json"
+        path.parent.mkdir(parents=True)
+        legacy_payload = evidence_payload(screenshot_manifest=[], screenshot_count=0)
+        path.write_text(json.dumps({
+            "record_id": record_id,
             "stage": "evidence_validated",
             "stages": {
                 "prepared": {"prepared": True},
                 "queries_resolved": {
                     "source": "ark_seeds", "queries": ["one", "two", "three"],
                 },
-                "evidence_validated": screenshotless,
+                "evidence_validated": legacy_payload,
             },
             "version": 2,
         }), encoding="utf-8")
-        self.assertEqual(
-            screenshotless,
-            self.store.load("recLegacyEvidence1")["stages"]["evidence_validated"],
-        )
-        before = checkpoint_path.read_bytes()
-        with self.assertRaisesRegex(CheckpointError, "read-only"):
-            self.store.save_stage(
-                "recLegacyEvidence1", "evidence_validated",
-                {**screenshotless, "validated_at": "2026-08-21T10:01:00Z"},
-            )
-        self.assertEqual(before, checkpoint_path.read_bytes())
-        with self.assertRaisesRegex(CheckpointError, "read-only"):
-            self.store.save_stage(
-                "recLegacyEvidence1", "finalized",
-                {"result_count": 0, "completed": []},
-            )
-        self.assertEqual(before, checkpoint_path.read_bytes())
-
-    def test_new_evidence_stage_requires_paired_screenshot_fields(self) -> None:
-        core = {
-            "query_provenance": {
-                "source": "ark_seeds", "queries": ["one", "two", "three"],
-            },
-            "evidence": {"queries": []},
-            "candidates": [],
-            "observation_count": 90,
-            "recurring_count": 2,
-            "detail_count": 2,
-            "screenshot_manifest": [{"id": "proof-1"}],
-            "screenshot_count": 1,
-            "evidence_digest": "a" * 64,
-            "validated_at": "2026-08-21T10:00:00Z",
-        }
-        for index, missing in enumerate(
-            ({"screenshot_manifest", "screenshot_count"}, {"screenshot_manifest"}, {"screenshot_count"}),
-            start=1,
-        ):
-            with self.subTest(missing=missing):
-                record_id = f"recMissingScreenshots{index}"
-                self.store.save_stage(record_id, "prepared", {"prepared": True})
-                self.store.save_stage(
-                    record_id, "queries_resolved",
-                    {"source": "ark_seeds", "queries": ["one", "two", "three"]},
-                )
-                payload = {key: value for key, value in core.items() if key not in missing}
-                with self.assertRaisesRegex(CheckpointError, "screenshot"):
-                    self.store.save_stage(record_id, "evidence_validated", payload)
-                loaded = self.store.load(record_id)
-                assert loaded is not None
-                self.assertEqual("queries_resolved", loaded["stage"])
-                self.assertNotIn("evidence_validated", loaded["stages"])
+        with self.assertRaises(CheckpointError):
+            self.store.load(record_id)
 
     def test_legacy_v1_is_read_only_only_after_the_exact_legacy_finalized_prefix(self) -> None:
         record_id = "recLegacy1"

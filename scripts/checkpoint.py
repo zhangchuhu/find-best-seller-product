@@ -22,7 +22,6 @@ _ENVELOPE_KEYS = frozenset({"record_id", "stage", "stages", "version"})
 _EVIDENCE_SHARED_CORE_KEYS = frozenset({
     "evidence", "candidates",
     "observation_count", "recurring_count", "detail_count", "evidence_digest",
-    "screenshot_manifest", "screenshot_count",
 })
 _FORBIDDEN_KEYS = (
     "api_key",
@@ -221,14 +220,15 @@ def _evidence_timestamp(value: object) -> datetime | None:
 def _evidence_core_keys(value: Mapping[str, object]) -> frozenset[str] | None:
     """Recognize one immutable evidence provenance layout at a time."""
     keys = set(value)
-    screenshot_keys = {"screenshot_manifest", "screenshot_count"}
-    if not screenshot_keys <= keys:
-        return None
     if "autocomplete_provenance" in keys and "query_provenance" not in keys:
-        return _EVIDENCE_SHARED_CORE_KEYS | frozenset({"autocomplete_provenance"})
-    if "query_provenance" in keys and "autocomplete_provenance" not in keys:
-        return _EVIDENCE_SHARED_CORE_KEYS | frozenset({"query_provenance"})
-    return None
+        core = _EVIDENCE_SHARED_CORE_KEYS | frozenset({"autocomplete_provenance"})
+    elif "query_provenance" in keys and "autocomplete_provenance" not in keys:
+        core = _EVIDENCE_SHARED_CORE_KEYS | frozenset({"query_provenance"})
+    else:
+        return None
+    if not keys <= core | {"validated_at", "write_progress"}:
+        return None
+    return core
 
 
 def _progress_value(value: object) -> tuple[tuple[str, ...], tuple[str, ...], bool] | None:
@@ -534,6 +534,10 @@ class CheckpointStore:
             raise CheckpointError("checkpoint envelope is invalid")
         if any(not isinstance(stages[name], dict) for name in expected_stages):
             raise CheckpointError("checkpoint envelope is invalid")
+        if version == 2 and STAGES.index(stage) >= STAGES.index("evidence_validated"):
+            evidence = stages["evidence_validated"]
+            if not isinstance(evidence, Mapping) or _evidence_core_keys(evidence) is None:
+                raise CheckpointError("checkpoint envelope is invalid")
         normalized = _normalize_graph(loaded, self._forbidden_values)
         if not isinstance(normalized, dict):
             raise CheckpointError("checkpoint envelope is invalid")
@@ -742,9 +746,12 @@ class CheckpointStore:
             if (
                 stage == "evidence_validated"
                 and stage not in stages
-                and _evidence_core_keys(normalized) is None
+                and (
+                    (core := _evidence_core_keys(normalized)) is None
+                    or not (core | {"validated_at"}) <= set(normalized)
+                )
             ):
-                raise CheckpointError("checkpoint evidence requires screenshot proof")
+                raise CheckpointError("checkpoint evidence payload is invalid")
             if (
                 stage == "evidence_validated"
                 and stage not in stages
