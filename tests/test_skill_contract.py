@@ -113,7 +113,7 @@ class SkillContractTests(unittest.TestCase):
             "exactly three queries",
             "30–50 visible cards per query",
             "at least two distinct query sets",
-            "Every observation has exactly `query`, `rank`, `is_ad`, `title`, `url`, `product_id`, `thumbnail_url`, and `evidence_ref`",
+            "Every observation has exactly `query`, `rank`, `is_ad`, `title`, `url`, `product_id`, and `thumbnail_url`",
             "Each detail has exactly `identity`, `status`, `reason`, `detail_url`, `product_id`, `title`",
             "Outcomes must be an exact prefix of that order",
             "`status` is `qualified` or `rejected`",
@@ -152,7 +152,7 @@ class SkillContractTests(unittest.TestCase):
             "Platform category text is raw audit evidence only and never qualifies or rejects a candidate",
             "Compare source and candidate imagery by silhouette, construction, and defining garment parts",
             "`visual_structure_mismatch`",
-            "`category_mismatch` is accepted only when replaying legacy evidence",
+            "`category_mismatch` is rejected",
         )
         for clause in required_clauses:
             with self.subTest(clause=clause):
@@ -191,15 +191,9 @@ class SkillContractTests(unittest.TestCase):
         self.assertIsNotNone(example)
         value = json.loads(example.group(1))
         self.assertEqual(
-            {"task_record_id", "platform", "screenshots", "queries", "details"},
+            {"task_record_id", "platform", "queries", "details"},
             set(value),
         )
-        self.assertGreaterEqual(len(value["screenshots"]), 2)
-        for screenshot in value["screenshots"]:
-            self.assertEqual(
-                {"id", "kind", "file", "sha256", "page_url", "query", "identity"},
-                set(screenshot),
-            )
         self.assertEqual(3, len(value["queries"]))
         for block in value["queries"]:
             self.assertEqual({"query", "observations"}, set(block))
@@ -207,13 +201,9 @@ class SkillContractTests(unittest.TestCase):
             self.assertEqual(
                 {
                     "query", "rank", "is_ad", "title", "url", "product_id",
-                    "thumbnail_url", "evidence_ref",
+                    "thumbnail_url",
                 },
                 set(block["observations"][0]),
-            )
-            self.assertEqual(
-                {"screenshot_id", "bbox"},
-                set(block["observations"][0]["evidence_ref"]),
             )
             self.assertEqual(block["query"], block["observations"][0]["query"])
         self.assertEqual(
@@ -221,16 +211,9 @@ class SkillContractTests(unittest.TestCase):
                 "identity", "status", "reason", "detail_url", "product_id",
                 "title", "category", "sold_display", "reviews_display",
                 "rating_display", "match_level", "visual_features",
-                "evidence_refs",
             },
             set(value["details"][0]),
         )
-        self.assertEqual(
-            {"visual", "metrics"},
-            {item["purpose"] for item in value["details"][0]["evidence_refs"]},
-        )
-        for reference in value["details"][0]["evidence_refs"]:
-            self.assertEqual({"purpose", "screenshot_id", "bbox"}, set(reference))
         self.assertEqual(
             [
                 "mini dress",
@@ -285,20 +268,9 @@ class SkillContractTests(unittest.TestCase):
             "`visual_structure_mismatch`",
             "Structured fields are authoritative",
             "OCR must not populate, infer, repair, or override structured fields",
-            "Every card and every detail outcome must be bound to screenshot evidence",
-            "Missing, unreadable, deleted, replaced, or SHA-256-mismatched screenshot proof rejects the evidence",
-            "Finalization reopens and revalidates every referenced screenshot before dry-run output or any live write",
-            "128 screenshots",
-            "8 MiB per screenshot",
-            "128 MiB total",
-            "16,384 pixels",
-            "`qualified`: `visual` and `metrics`",
-            "`visual_structure_mismatch`: `visual`",
-            "`imagery_ambiguous_or_inaccessible`: `visual`",
-            "`metric_missing_or_ambiguous`: `metrics`",
-            "`threshold_failure`: `metrics`",
-            "`identity_changed`: `access_state`",
-            "`detail_inaccessible`: `access_state`",
+            "The root has exactly `task_record_id`, `platform`, `queries`, and `details`",
+            "Screenshot-era fields are rejected",
+            "The collector downloads only `evidence.json`",
             "zero Result Base writes and zero `任务状态` writes",
             "chrome-extension/shein-evidence-collector",
         ):
@@ -360,14 +332,14 @@ class SkillContractTests(unittest.TestCase):
             with self.subTest(clause=clause):
                 self.assertIn(clause, text)
 
-    def test_screenshot_gate_and_local_collector_are_explicit_across_skill_contract(self):
+    def test_dom_only_gate_and_local_collector_are_explicit_across_skill_contract(self):
         entrypoint = " ".join(read("SKILL.md").split())
         shein = " ".join(read("references/shein.md").split())
         metadata = " ".join(read("agents/openai.yaml").split())
         for clause in (
             "chrome-extension/shein-evidence-collector",
-            "Every accepted card and detail outcome must have valid screenshot proof",
-            "Screenshot validation failure stops before Result Base or `任务状态` mutation",
+            "Structured evidence has exactly four root fields",
+            "Screenshot-era fields are rejected",
         ):
             with self.subTest(scope="entrypoint", clause=clause):
                 self.assertIn(clause, entrypoint)
@@ -380,7 +352,7 @@ class SkillContractTests(unittest.TestCase):
         ):
             with self.subTest(scope="shein", clause=clause):
                 self.assertIn(clause, shein)
-        for clause in ("截图留证", "本地 SHEIN 采集器"):
+        for clause in ("结构化采集", "本地 SHEIN 采集器"):
             with self.subTest(scope="metadata", clause=clause):
                 self.assertIn(clause, metadata)
 
@@ -429,9 +401,8 @@ class SkillContractTests(unittest.TestCase):
             "third bounded visible-DOM round also timed out",
             "bundled unpacked SHEIN collector directory is available locally",
             "manual Chrome extension setup is permitted",
-            "using OCR to backfill any structured fields",
-            "one screenshot is missing",
-            "SHA-256 no longer matches",
+            "adding `screenshots`, `evidence_ref`, or `evidence_refs`",
+            "expecting the validator to ignore those fields",
             "Result Base and task-status writes",
         ):
             with self.subTest(stimulus=stimulus):
@@ -520,7 +491,8 @@ class SkillContractTests(unittest.TestCase):
             "choose **Load unpacked**",
             "Structured visible-page fields are authoritative",
             "OCR cannot populate, infer, repair, or override missing fields",
-            "screenshot validation failure means zero Result Base writes and zero `任务状态` writes",
+            "exports only `evidence.json`",
+            "screenshot-era fields are rejected before Result Base or `任务状态` writes",
             "Dry-run itself never upserts records, uploads attachments, or changes task status",
         ):
             with self.subTest(required_behavior=required_behavior):

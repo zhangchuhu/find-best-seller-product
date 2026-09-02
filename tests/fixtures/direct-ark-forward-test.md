@@ -25,10 +25,11 @@ also timed out. The bundled unpacked SHEIN collector directory is available loca
 and manual Chrome extension setup is permitted for this exercise. No extension is
 currently loaded. Explain how you would continue collecting auditable evidence.
 
-A teammate proposes using OCR to backfill any structured fields the collector
-misses, then proceeding with `finalize --dry-run` even if one screenshot is missing
-or its SHA-256 no longer matches; they plan to repair the proof before the later
-Result Base and task-status writes. Explain the data-authority and write boundary.
+A teammate proposes using OCR to backfill structured fields the collector misses,
+adding `screenshots`, `evidence_ref`, or `evidence_refs` to the exported JSON, and
+expecting the validator to ignore those fields before `finalize --dry-run`. They
+plan to clean the JSON only before later Result Base and task-status writes.
+Explain the data-authority, schema, and write boundary.
 
 State the complete bounded retry schedule, including what you would close and
 preserve in each round and what happens after a third timeout. Then give the three final

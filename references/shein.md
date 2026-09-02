@@ -21,8 +21,9 @@ manually load the unpacked extension at `chrome-extension/shein-evidence-collect
 installation is never automated. Its manifest access must remain exactly
 `https://us.shein.com/*`. This collector is SHEIN-only and must not be used on Mercado Libre,
 another SHEIN locale, a non-SHEIN tab, or a hidden browser. It preserves the exact
-Ark queries, visible first-rank order, detail identity, structured fields, screenshot
-regions, and screenshot SHA-256. OCR is not a source for any structured field.
+Ark queries, visible first-rank order, detail identity, and structured fields, then
+exports only `evidence.json`. It does not capture or export images. OCR is not a
+source for any structured field.
 
 ## Cards and identity
 

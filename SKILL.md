@@ -20,7 +20,7 @@ The first real run uses one selected record and `--dry-run`.
 
 A product must recur in at least two distinct query sets. Follow the product-evidence fields, outcome order, thresholds, and features. Colors/sizes may remain only in verbatim source fields; they must not enter queries, `match_level`, `visual_features`, qualification/rejection, recurrence/ranking, or result visual text.
 
-Every accepted card and detail outcome must have valid screenshot proof. Structured fields, not screenshots or OCR, are authoritative. Screenshot validation failure stops before Result Base or `任务状态` mutation; `finalize` revalidates the files for both dry-run and live execution.
+Structured evidence has exactly four root fields: `task_record_id`, `platform`, `queries`, and `details`. Structured visible-DOM fields are authoritative; OCR cannot backfill them. Screenshot-era fields are rejected rather than ignored. Any evidence failure stops before Result Base or `任务状态` mutation.
 
 Platform category text is audit-only. Compare imagery by silhouette, construction, and defining garment parts; reject contradictions as `visual_structure_mismatch`.
 
