@@ -4,8 +4,10 @@
   "version": "0.1.0",
   "permissions": ["activeTab", "downloads"],
   "host_permissions": ["https://us.shein.com/*"],
-  "background": {"service_worker": "background.js"},
-  "action": {"default_title": "Collect SHEIN evidence"},
+  "action": {
+    "default_title": "Collect SHEIN evidence",
+    "default_popup": "collector.html"
+  },
   "content_scripts": [{
     "matches": ["https://us.shein.com/*"],
     "js": ["content.js"],
