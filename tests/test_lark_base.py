@@ -569,6 +569,28 @@ class LarkWriteTests(unittest.TestCase):
         content_check.assert_called_once()
         self.assertEqual([], client._runner.calls)
 
+    def test_verify_existing_result_accepts_base_markdown_rendering_of_the_same_url(self):
+        client = LarkBaseClient(runner=FakeRunner([]))
+        task_value = sample_task()
+        candidate = sample_candidate()
+        payload = client._result_payload(task_value, candidate)
+        canonical = payload["爆款链接"]
+        existing = {
+            "_record_id": "rec-result",
+            **payload,
+            "爆款链接": f"[{canonical}]({canonical})",
+            "原图": [{"file_token": "tok", "name": "look.jpg"}],
+        }
+        with tempfile.TemporaryDirectory() as directory:
+            source = Path(directory) / "look.jpg"
+            source.write_bytes(b"source")
+            with mock.patch.object(client, "find_existing_result", return_value=existing), mock.patch.object(
+                client, "_file_sha256", return_value="digest"
+            ), mock.patch.object(
+                client, "_has_matching_attachment_content", return_value=True
+            ):
+                self.assertTrue(client.verify_existing_result(task_value, candidate, source))
+
     def setUp(self):
         self.directory = tempfile.TemporaryDirectory()
         self.addCleanup(self.directory.cleanup)
@@ -600,6 +622,22 @@ class LarkWriteTests(unittest.TestCase):
             call[0][call[0].index("--offset") + 1] for call in runner.calls
         ])
 
+    def test_find_existing_result_matches_markdown_link_returned_by_real_base(self):
+        url = "https://us.shein.com/black-dress-p-123.html?utm_source=base"
+        runner = FakeRunner([cli_result(result_matrix(
+            rows=[result_values(url=f"[{url}]({url})")],
+            record_ids=["result-markdown"],
+        ))])
+
+        found = LarkBaseClient(runner=runner).find_existing_result(
+            "SKU-9",
+            Platform.SHEIN_US,
+            "https://us.shein.com/black-dress-p-123.html?fbclid=workflow",
+        )
+
+        self.assertIsNotNone(found)
+        self.assertEqual("result-markdown", found["_record_id"])
+
     def test_duplicate_business_key_rows_are_rejected_instead_of_updating_arbitrarily(self):
         duplicate_rows = result_matrix(
             rows=[result_values(), result_values()],
@@ -625,11 +663,23 @@ class LarkWriteTests(unittest.TestCase):
             rows=[result_values(attachment=[{"name": "look.jpg", "file_token": "stored"}])],
             record_ids=["result-new"],
         )
+        upload_directory_identities = []
+
+        def upload_from_pinned_source_directory(args, kwargs):
+            inherited = kwargs.get("pass_fds")
+            upload_directory_identities.append(
+                None if not inherited else (
+                    os.fstat(inherited[0]).st_dev,
+                    os.fstat(inherited[0]).st_ino,
+                )
+            )
+            return cli_result({"ok": True, "data": {}})
+
         runner = FakeRunner([
             cli_result(result_matrix()),
             cli_result({"ok": True, "data": {"record_id": "result-new"}}),
             cli_result(current),
-            cli_result({"ok": True, "data": {}}),
+            upload_from_pinned_source_directory,
             cli_result(verified),
             lambda args, kwargs: (
                 write_download_output(args, kwargs, b"image-data")
@@ -674,8 +724,16 @@ class LarkWriteTests(unittest.TestCase):
             "lark-cli", "base", "+record-upload-attachment",
             "--base-token", RESULT_BASE_TOKEN, "--table-id", RESULT_TABLE_ID,
             "--record-id", "result-new", "--field-id", "原图",
-            "--file", str(self.source), "--format", "json", "--as", "user",
+            "--file", self.source.name, "--format", "json", "--as", "user",
         ], upload)
+        upload_kwargs = runner.calls[3][1]
+        self.assertNotIn("cwd", upload_kwargs)
+        self.assertEqual(1, len(upload_kwargs["pass_fds"]))
+        self.assertTrue(callable(upload_kwargs["preexec_fn"]))
+        self.assertEqual(
+            [(self.source.parent.stat().st_dev, self.source.parent.stat().st_ino)],
+            upload_directory_identities,
+        )
 
     def test_update_skips_upload_only_for_verified_matching_attachment_content(self):
         existing_row = result_values(
@@ -704,6 +762,34 @@ class LarkWriteTests(unittest.TestCase):
         upsert = runner.calls[1][0]
         self.assertEqual("result-2", upsert[upsert.index("--record-id") + 1])
         self.assertFalse(any("+record-upload-attachment" in args for args, _ in runner.calls))
+
+    def test_update_accepts_base_markdown_rendering_of_the_same_url_on_readback(self):
+        canonical = "https://us.shein.com/black-dress-p-123.html"
+        markdown_row = result_values(
+            url=f"[{canonical}]({canonical})",
+            attachment=[{"name": "look.jpg", "file_token": "already"}],
+        )
+        runner = FakeRunner([
+            cli_result(result_matrix(rows=[markdown_row], record_ids=["result-2"])),
+            cli_result({"ok": True, "data": {"record_id": "result-2"}}),
+            lambda args, kwargs: (
+                write_download_output(args, kwargs, b"image-data")
+                or cli_result({"ok": True, "data": {}})
+            ),
+            cli_result(result_matrix(rows=[markdown_row], record_ids=["result-2"])),
+            lambda args, kwargs: (
+                write_download_output(args, kwargs, b"image-data")
+                or cli_result({"ok": True, "data": {}})
+            ),
+        ])
+
+        result = LarkBaseClient(runner=runner).write_result(
+            sample_task(), sample_candidate(), self.source,
+        )
+
+        self.assertEqual("result-2", result.record_id)
+        self.assertFalse(result.created)
+        self.assertFalse(result.attachment_uploaded)
 
     def test_readback_rehashes_even_when_attachment_token_is_unchanged(self):
         existing_row = result_values(

@@ -659,8 +659,10 @@ class LarkBaseClient:
             existing_url = row.get("爆款链接")
             if not isinstance(existing_url, str):
                 continue
+            markdown = _MARKDOWN_LINK.fullmatch(existing_url)
+            url_value = markdown.group(1) if markdown else existing_url
             try:
-                normalized_existing = canonicalize_url(platform, existing_url)
+                normalized_existing = canonicalize_url(platform, url_value)
             except (TypeError, ValueError):
                 continue
             if normalized_existing == wanted_url:
@@ -787,6 +789,21 @@ class LarkBaseClient:
             "视觉特征": visual_feature_text(candidate),
         }
 
+    @staticmethod
+    def _result_payload_mismatches(
+        row: Mapping[str, object], payload: Mapping[str, str],
+    ) -> list[str]:
+        mismatches: list[str] = []
+        for name, expected in payload.items():
+            actual = row.get(name)
+            if name == "爆款链接" and isinstance(actual, str):
+                markdown = _MARKDOWN_LINK.fullmatch(actual)
+                if markdown:
+                    actual = markdown.group(1)
+            if actual != expected:
+                mismatches.append(name)
+        return mismatches
+
     def write_result(
         self,
         task: Task,
@@ -843,21 +860,29 @@ class LarkBaseClient:
                     current, result_id, source_hash, temporary_root, hash_cache,
                 )
                 if not has_source:
-                    self._invoke(
-                        "result attachment upload",
-                        [
-                            "+record-upload-attachment",
-                            "--base-token", RESULT_BASE_TOKEN,
-                            "--table-id", RESULT_TABLE_ID,
-                            "--record-id", result_id,
-                            "--field-id", "原图",
-                            "--file", str(source_image),
-                            "--format", "json", "--as", "user",
-                        ],
+                    source_directory_fd = os.open(
+                        source_image.parent,
+                        os.O_RDONLY | os.O_DIRECTORY | getattr(os, "O_NOFOLLOW", 0),
                     )
+                    try:
+                        self._invoke(
+                            "result attachment upload",
+                            [
+                                "+record-upload-attachment",
+                                "--base-token", RESULT_BASE_TOKEN,
+                                "--table-id", RESULT_TABLE_ID,
+                                "--record-id", result_id,
+                                "--field-id", "原图",
+                                "--file", source_image.name,
+                                "--format", "json", "--as", "user",
+                            ],
+                            cwd_fd=source_directory_fd,
+                        )
+                    finally:
+                        os.close(source_directory_fd)
                     attachment_uploaded = True
                 verified = self._get_result(result_id)
-                mismatches = [name for name, value in payload.items() if verified.get(name) != value]
+                mismatches = self._result_payload_mismatches(verified, payload)
                 if not self._has_matching_attachment_content(
                     verified, result_id, source_hash, temporary_root, {},
                 ):
@@ -902,7 +927,7 @@ class LarkBaseClient:
         record_id = existing.get("_record_id")
         if not isinstance(record_id, str) or not record_id:
             return False
-        if any(existing.get(name) != value for name, value in payload.items()):
+        if self._result_payload_mismatches(existing, payload):
             return False
         source_hash = self._file_sha256(source_image)
         with tempfile.TemporaryDirectory(
