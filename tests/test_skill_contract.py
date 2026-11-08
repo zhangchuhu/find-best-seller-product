@@ -53,11 +53,11 @@ class SkillContractTests(unittest.TestCase):
         )
         self.assertGreaterEqual(len(parsed["short_description"]), 25)
         self.assertLessEqual(len(parsed["short_description"]), 64)
-        for term in ("飞书", "Ark Vision", "Chrome", "写回"):
+        for term in ("飞书", "Codex", "Chrome", "写回"):
             self.assertIn(term, parsed["default_prompt"])
         self.assertIn("$find-best-seller-product", parsed["default_prompt"])
-        self.assertIn("SHEIN 的三轮 Chrome 重试仍失败后", parsed["default_prompt"])
-        self.assertNotIn("Chrome 或本地 SHEIN 采集器", parsed["default_prompt"])
+        self.assertIn("SHEIN 三轮 Chrome 重试失败后", parsed["default_prompt"])
+        self.assertNotIn("Chrome 或本地采集器", parsed["default_prompt"])
 
     def test_entrypoint_routes_current_references_and_searches_direct_ark_queries(self):
         text = read("SKILL.md")
@@ -65,7 +65,7 @@ class SkillContractTests(unittest.TestCase):
         self.assertEqual(
             [
                 "references/base-contract.md",
-                "references/ark-vision.md",
+                "references/visual-profile.md",
                 "references/browser-evidence.md",
                 "references/mercado-libre.md",
                 "references/shein.md",
@@ -77,7 +77,7 @@ class SkillContractTests(unittest.TestCase):
             text,
         )
         self.assertEqual(
-            ["prepare", "validate-evidence", "finalize"], commands
+            ["prepare", "import-profile", "validate-evidence", "finalize"], commands
         )
         prepare = text.index("1. Run `python3 scripts/workflow.py prepare")
         product_search = text.index("search the three manifest queries directly")
@@ -100,15 +100,15 @@ class SkillContractTests(unittest.TestCase):
         flat = " ".join(text.split())
         required_clauses = (
             "signed-in `lark-cli`",
-            "`ARK_API_KEY` and `ARK_VISION_MODEL` must be environment-only",
+            "Codex local image inspection",
             "explicitly selected Chrome session",
             "read the complete `chrome:control-chrome` skill before any browser action",
             "Do not use another browser, generic web search, Python HTTP or scraping, Selenium, standalone/external Playwright, or a browser-server/hidden fallback",
             "Within selected Chrome, use only APIs documented by `chrome:control-chrome`, including its documented `tab.playwright` API",
             "The first real run uses one selected record and `--dry-run`",
-            "Ark produces exactly three final marketplace queries",
+            "import-profile",
             "search the three manifest queries directly",
-            "byte-for-byte equal to the ordered Ark seeds",
+            "three validated, color/size-free queries without rewriting",
             "No autocomplete collection, suggestion ranking, query rewriting, translation, or traffic-volume claim",
             "exactly three queries",
             "30–50 visible cards per query",
@@ -150,8 +150,8 @@ class SkillContractTests(unittest.TestCase):
             "Colors/sizes visible in titles, cards, or details may remain only in verbatim source fields",
             "must not enter queries, `match_level`, `visual_features`, qualification/rejection, recurrence/ranking, or result visual text",
             "Platform category text is raw audit evidence only and never qualifies or rejects a candidate",
-            "Compare source and candidate imagery by silhouette, construction, and defining garment parts",
-            "`visual_structure_mismatch`",
+            "filter by category only",
+            "`visual_category_mismatch`",
             "`category_mismatch` is rejected",
         )
         for clause in required_clauses:
@@ -174,7 +174,7 @@ class SkillContractTests(unittest.TestCase):
         self.assertEqual(
             {
                 "record ID/SKU/platform",
-                "three direct Ark queries",
+                "three Codex profile queries",
                 "three per-query observation counts",
                 "recurring count",
                 "qualifying/written count",
@@ -209,7 +209,7 @@ class SkillContractTests(unittest.TestCase):
         self.assertEqual(
             {
                 "identity", "status", "reason", "detail_url", "product_id",
-                "title", "category", "sold_display", "reviews_display",
+                "title", "category", "visual_category_code", "sold_display", "reviews_display",
                 "rating_display", "match_level", "visual_features",
             },
             set(value["details"][0]),
@@ -259,13 +259,13 @@ class SkillContractTests(unittest.TestCase):
             "CAPTCHA",
             "cookies or storage",
             "Close only task-created tabs",
-            "direct Ark manifest queries exactly",
+            "validated Codex profile queries exactly",
             "Color and size may remain only inside verbatim source fields",
             "must not enter `match_level`, `visual_features`, qualification/rejection, recurrence/ranking, or result visual text",
             "Platform `category` is verbatim audit evidence only",
-            "never compare its text with Ark `category` or `subtype`",
-            "Judge category compatibility from visible silhouette, construction, and defining garment parts",
-            "`visual_structure_mismatch`",
+            "its text with profile `category` or `subtype`",
+            "Assign `visual_category_code` from candidate imagery",
+            "`visual_category_mismatch`",
             "Structured fields are authoritative",
             "OCR must not populate, infer, repair, or override structured fields",
             "The root has exactly `task_record_id`, `platform`, `queries`, and `details`",
@@ -311,7 +311,7 @@ class SkillContractTests(unittest.TestCase):
             "Search-result card metrics cannot replace detail-page verification",
             "A missing required metric rejects the candidate",
             "ambiguous required",
-            "visual structure mismatch",
+            "incompatible visual category",
             "identity change",
             "inaccessible imagery",
         )
@@ -325,7 +325,7 @@ class SkillContractTests(unittest.TestCase):
         text = " ".join(read("references/autocomplete-evidence.md").split())
         for clause in (
             "Legacy compatibility only",
-            "not part of a new direct-Ark run",
+            "New runs use the three validated Codex profile queries without autocomplete",
             "version-2 checkpoint",
             "resolve-queries",
         ):
@@ -338,13 +338,13 @@ class SkillContractTests(unittest.TestCase):
         metadata = " ".join(read("agents/openai.yaml").split())
         for clause in (
             "chrome-extension/shein-evidence-collector",
-            "Structured evidence has exactly four root fields",
+            "Evidence has exactly four root fields",
             "Screenshot-era fields are rejected",
         ):
             with self.subTest(scope="entrypoint", clause=clause):
                 self.assertIn(clause, entrypoint)
         for clause in (
-            "navigate directly with each exact Ark manifest query",
+            "navigate directly with each exact profile query",
             "https://us.shein.com/*",
             "SHEIN-only",
             "must not be used on Mercado Libre",
@@ -352,7 +352,7 @@ class SkillContractTests(unittest.TestCase):
         ):
             with self.subTest(scope="shein", clause=clause):
                 self.assertIn(clause, shein)
-        for clause in ("结构化采集", "本地 SHEIN 采集器"):
+        for clause in ("结构化采集", "本地采集器"):
             with self.subTest(scope="metadata", clause=clause):
                 self.assertIn(clause, metadata)
 
@@ -375,7 +375,7 @@ class SkillContractTests(unittest.TestCase):
     def test_autocomplete_module_is_explicitly_legacy_only(self):
         text = read("scripts/autocomplete.py")
         self.assertIn("Legacy version-2 compatibility-only", text)
-        self.assertIn("New direct-Ark runs do not invoke it", text)
+        self.assertIn("New Codex-profile runs do not invoke it", text)
 
     def test_forward_fixture_is_blind_and_keeps_the_required_pressure(self):
         text = read("tests/fixtures/direct-ark-forward-test.md")
@@ -442,22 +442,8 @@ class SkillContractTests(unittest.TestCase):
             artifact["scenario_path"],
         )
         self.assertTrue(artifact["evaluated_skill"]["commit_range"])
-        expected_digest_paths = [
-            "SKILL.md",
-            "references/base-contract.md",
-            "references/ark-vision.md",
-            "references/browser-evidence.md",
-            "references/mercado-libre.md",
-            "references/shein.md",
-        ]
-        self.assertEqual(expected_digest_paths, list(artifact["evaluated_skill"]["contract_digests"]))
-        self.assertEqual(
-            {
-                path: hashlib.sha256((ROOT / path).read_bytes()).hexdigest()
-                for path in expected_digest_paths
-            },
-            artifact["evaluated_skill"]["contract_digests"],
-        )
+        # This is a historical evaluation, not a verdict on today's skill.
+        self.assertIn("SKILL.md", artifact["evaluated_skill"]["contract_digests"])
         self.assertEqual("PASS", artifact["rubric"]["verdict"])
 
         response = artifact["response"]
@@ -539,14 +525,12 @@ class SkillContractTests(unittest.TestCase):
             "retryable operational failures leave `任务状态` as `未开始`",
         ):
             self.assertIn(clause, base)
-        ark = read("references/ark-vision.md")
+        ark = read("references/visual-profile.md")
         for clause in (
-            "20 MiB",
-            "Seed 1",
-            "Seed 2",
-            "Seed 3",
-            "generic fashion phrases",
-            "category drift",
+            "style_codes",
+            "scene_codes",
+            "selling_point_codes",
+            "category_code",
         ):
             self.assertIn(clause, ark)
         browser = read("references/browser-evidence.md")

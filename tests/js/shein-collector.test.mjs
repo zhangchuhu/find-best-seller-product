@@ -59,6 +59,7 @@ function qualifiedDetail(identity = "shein-us:10001") {
     product_id: productId,
     title: "Blue Petite Dress XS",
     category: "Women / Dresses",
+    visual_category_code: "dress",
     sold_display: null,
     reviews_display: "245 reviews",
     rating_display: "4.8",
@@ -153,6 +154,15 @@ test("structured detail outcomes retain identity and semantic validation", () =>
 
   const bad = {...qualifiedDetail("shein-us:10002"), match_level: null, visual_features: []};
   assert.throws(() => api.addDetailOutcome(session, bad), /match evidence/);
+});
+
+test("collector exports the operator's pants-set category for blazer and full-length pants", () => {
+  const api = loadClassicScript(COLLECTOR);
+  const {session} = populatedSession(api, {resultLimit: 1});
+  const visible = {blocked: false, identity_matches: true, page_url: "https://us.shein.com/dress-p-10001.html", product_id: "10001", title: "Blazer and Pants", category: "Suits", sold_display: null, reviews_display: "500", rating_display: "4.8"};
+  const detail = api.detailOutcomePlan("shein-us:10001", visible, {status: "qualified", visualCategoryCode: "womens_pants_set", matchLevel: "类似竞品", visualFeatures: ["blazer", "full length pants"]});
+  api.addDetailOutcome(session, detail);
+  assert.equal(JSON.parse(api.serializeEvidence(session)).details[0].visual_category_code, "womens_pants_set");
 });
 
 test("extension package contains no screenshot capture path and downloads JSON only", () => {

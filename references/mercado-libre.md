@@ -1,7 +1,7 @@
 # Mercado Libre México evidence
 
 Use Mercado Libre México only. Search in Spanish (`es-MX`) with the three
-direct Ark manifest queries only: the ordered Ark seeds are the final queries.
+direct Codex profile queries only: the ordered profile seeds are the final queries.
 Color and size are not allowed
 in queries or visual comparison; visible color/size text may remain only
 verbatim evidence. Accepted product URLs use HTTPS and the exact host
@@ -32,7 +32,6 @@ Reject an ambiguous required sold metric rather than estimating it.
 
 Search-result card metrics cannot replace detail-page verification. A missing required metric rejects the candidate. Do not use seller totals or followers,
 review count as sold count, a badge-only `MÁS VENDIDO`, or any other proxy.
-Also reject identity change, inaccessible imagery, and a visual structure
-mismatch where the garment's silhouette, construction, or defining parts
-contradict the source profile. Category or breadcrumb wording is audit evidence
+Also reject identity change, inaccessible imagery, and an incompatible visual
+category. Category or breadcrumb wording is audit evidence
 only and never overrides the image-based judgment.

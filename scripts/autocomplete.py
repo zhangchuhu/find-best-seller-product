@@ -1,6 +1,6 @@
 """Legacy version-2 compatibility-only resolution of autocomplete evidence.
 
-New direct-Ark runs do not invoke it. The caller supplies only suggestions visibly captured in the selected Chrome
+New Codex-profile runs do not invoke it. The caller supplies only suggestions visibly captured in the selected Chrome
 session.  This module validates that evidence and chooses one displayed string
 per prepared seed; it never drives a browser, calls a service, or invents text.
 """

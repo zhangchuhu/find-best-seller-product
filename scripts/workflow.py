@@ -21,7 +21,8 @@ import stat
 import sys
 import uuid
 
-from scripts.ark_vision import ArkVisionClient, VisualProfile
+from scripts.ark_vision import VisualProfile
+from scripts.visual_profile import ProductVisualProfile, CATEGORY_CODES
 from scripts.autocomplete import resolve_autocomplete
 from scripts.candidates import eligible_identities, merge_observations, select_results
 from scripts.checkpoint import CheckpointStore
@@ -49,6 +50,7 @@ _OBSERVATION_KEYS = {
 }
 _REJECTION_REASONS = {
     "visual_structure_mismatch",
+    "visual_category_mismatch",
     "imagery_ambiguous_or_inaccessible",
     "metric_missing_or_ambiguous",
     "threshold_failure",
@@ -226,9 +228,7 @@ def _exact(value: object, keys: set[str], label: str) -> dict[str, object]:
 
 
 def _store(root: Path) -> CheckpointStore:
-    configured = os.environ.get("ARK_API_KEY")
-    forbidden = (configured,) if isinstance(configured, str) and configured else ()
-    return CheckpointStore(root, forbidden_values=forbidden)
+    return CheckpointStore(root)
 
 
 def _run_parts(run_dir: Path, *, verify_checkpoint: bool = True) -> tuple[Path, str, Path]:
@@ -255,11 +255,15 @@ def _prepared_payload(
         stages = checkpoint["stages"]
         if not isinstance(stages, dict):
             raise ValueError
-        payload = _exact(
-            stages["prepared"],
-            {"task", "source_image", "visual_profile", "query_seeds"},
-            "prepared checkpoint",
-        )
+        raw = stages["prepared"]
+        if isinstance(raw, dict) and set(raw) == {"task", "source_image", "source_sha256"}:
+            payload = dict(raw)
+            resolved = stages.get("queries_resolved")
+            if isinstance(resolved, dict) and resolved.get("source") == "codex_visual_profile":
+                payload["visual_profile"] = resolved["visual_profile"]
+                payload["query_seeds"] = resolved["queries"]
+        else:
+            payload = _exact(raw, {"task", "source_image", "visual_profile", "query_seeds"}, "prepared checkpoint")
         task = Task.from_dict(payload["task"])
         if task.record_id != record_id:
             raise ValueError
@@ -275,12 +279,17 @@ def _prepared_payload(
             or image_path.stat().st_size <= 0
         ):
             raise ValueError
-        profile = VisualProfile.from_dict(payload["visual_profile"], task.platform)
+        if "source_sha256" in payload:
+            if LarkBaseClient._file_sha256(image_path) != payload["source_sha256"]:
+                raise ValueError
+            if "visual_profile" not in payload:
+                return payload
+        profile = (ProductVisualProfile if "source_sha256" in payload else VisualProfile).from_dict(payload["visual_profile"], task.platform)
         seeds = payload["query_seeds"]
         if not isinstance(seeds, list) or tuple(seeds) != profile.query_seeds:
             raise ValueError
         return payload
-    except (KeyError, TypeError, ValueError, WorkflowError):
+    except (KeyError, TypeError, ValueError, WorkflowError, OSError, RuntimeError):
         raise _error("prepared checkpoint is invalid") from None
 
 
@@ -303,9 +312,20 @@ def _direct_resolution_payload(
 ) -> tuple[dict[str, object], tuple[str, str, str]]:
     """Build the sole direct resolution accepted for newly prepared runs."""
     task = Task.from_dict(prepared["task"])
-    profile = VisualProfile.from_dict(prepared["visual_profile"], task.platform)
+    profile = (ProductVisualProfile if "source_sha256" in prepared else VisualProfile).from_dict(prepared["visual_profile"], task.platform)
     queries = profile.query_seeds
     return {"source": "ark_seeds", "queries": list(queries)}, queries
+
+
+def _analysis_request(task: Task, image_path: Path) -> dict[str, object]:
+    return {
+        "task_record_id": task.record_id,
+        "platform": task.platform.value,
+        "source_image": str(image_path),
+        "query_language": "es-MX" if task.platform is Platform.MERCADO_MX else "en-US",
+        "required_profile_fields": list(ProductVisualProfile.__dataclass_fields__),
+        "schema_reference": "references/visual-profile.md",
+    }
 
 
 def _queries_resolved_payload(
@@ -318,8 +338,12 @@ def _queries_resolved_payload(
         if not isinstance(stages, dict):
             raise ValueError
         task = Task.from_dict(prepared["task"])
-        profile = VisualProfile.from_dict(prepared["visual_profile"], task.platform)
+        profile = (ProductVisualProfile if "source_sha256" in prepared else VisualProfile).from_dict(prepared["visual_profile"], task.platform)
         raw_resolved = stages["queries_resolved"]
+        if isinstance(raw_resolved, dict) and raw_resolved.get("source") == "codex_visual_profile":
+            if set(raw_resolved) != {"source", "queries", "visual_profile"} or tuple(raw_resolved["queries"]) != profile.query_seeds:
+                raise ValueError
+            return raw_resolved, profile.query_seeds
         if isinstance(raw_resolved, dict) and set(raw_resolved) == {"source", "queries"}:
             resolved = _exact(raw_resolved, {"source", "queries"}, "resolved queries checkpoint")
             queries = resolved["queries"]
@@ -369,7 +393,9 @@ def _resolution_provenance(
 ) -> tuple[str, dict[str, object]]:
     """Return the durable provenance layout for direct and legacy resolutions."""
     if set(resolved) == {"source", "queries"}:
-        return "query_provenance", {"source": "ark_seeds", "queries": list(queries)}
+        return "query_provenance", {"source": resolved["source"], "queries": list(queries)}
+    if resolved.get("source") == "codex_visual_profile":
+        return "query_provenance", {"source": "codex_visual_profile", "queries": list(queries)}
     return "autocomplete_provenance", _autocomplete_provenance(resolved, queries)
 
 
@@ -532,9 +558,7 @@ def _resolve_queries_locked(run_dir: Path, input_path: Path) -> str:
 
 
 def resolve_queries(run_dir: Path, input_path: Path) -> str:
-    _root, _record_id, absolute_run = _run_parts(Path(run_dir), verify_checkpoint=False)
-    with _record_lock(absolute_run):
-        return _resolve_queries_locked(absolute_run, Path(input_path))
+    raise _error("unfinished legacy checkpoint cannot be resumed")
 
 
 def prepare(
@@ -598,14 +622,16 @@ def _prepare_locked(selected, root, restart_analysis, lark, ark_client):
     except Exception:
         raise _error("checkpoint could not be loaded") from None
     if checkpoint is not None and restart_analysis:
-        if checkpoint["stage"] == "queries_resolved":
-            raise _error("restart-analysis cannot replace direct queries")
-        if checkpoint["stage"] != "prepared":
-            raise _error("restart-analysis cannot invalidate validated evidence")
+        raise _error("restart-analysis cannot replace an existing checkpoint")
     if checkpoint is not None and not restart_analysis:
         payload = _prepared_payload(checkpoint, selected.record_id, root / selected.record_id)
+        if "source_sha256" not in payload:
+            raise _error("unfinished legacy checkpoint cannot be resumed")
         if payload["task"] != _task_dict(selected):
             raise _error("prepared task no longer matches Lark")
+        if checkpoint["stage"] == "prepared":
+            _write_json(root / selected.record_id / "analysis-request.json", _analysis_request(selected, Path(payload["source_image"]["path"])))
+            return f"Prepared {selected.record_id}; inspect source image and import profile"
         manifest_path = root / selected.record_id / "manifest.json"
         queries = None
         if checkpoint.get("version") == 2 and checkpoint["stage"] == "prepared":
@@ -639,28 +665,59 @@ def _prepare_locked(selected, root, restart_analysis, lark, ark_client):
             raise ValueError
     except Exception:
         raise _error("source image download failed") from None
-    try:
-        ark = ark_client or ArkVisionClient()
-        visual = ark.analyze(image_path, selected.platform)
-        if not isinstance(visual, VisualProfile):
-            raise TypeError
-    except Exception:
-        raise _error("Ark image analysis failed") from None
     payload = {
         "task": _task_dict(selected),
         "source_image": {"path": str(image_path), "name": image_path.name},
-        "visual_profile": visual.to_dict(),
-        "query_seeds": list(visual.query_seeds),
+        "source_sha256": LarkBaseClient._file_sha256(image_path),
     }
     try:
         store.save_stage(selected.record_id, "prepared", payload)
-        resolution, queries = _direct_resolution_payload(payload)
-        store.save_stage(selected.record_id, "queries_resolved", resolution)
     except Exception:
         raise _error("prepared checkpoint could not be saved") from None
-    manifest_path = run_dir / "manifest.json"
-    _write_json(manifest_path, _manifest_payload(payload, queries))
-    return f"Prepared {selected.record_id}; manifest: {manifest_path.absolute()}"
+    _write_json(run_dir / "analysis-request.json", _analysis_request(selected, image_path))
+    return f"Prepared {selected.record_id}; inspect source image and import profile"
+
+
+def import_profile(run_dir, input_path, lark_client=None):
+    root, record_id, absolute_run = _run_parts(Path(run_dir))
+    with _record_lock(absolute_run):
+        store = _store(root)
+        checkpoint = store.load(record_id)
+        prepared = _prepared_payload(checkpoint, record_id, absolute_run)
+        if "source_sha256" not in prepared:
+            raise _error("unfinished legacy checkpoint cannot be resumed")
+        task = Task.from_dict(prepared["task"])
+        lark = lark_client or LarkBaseClient()
+        try:
+            current, status = lark.get_task_state(record_id)
+            if current != task or status != "未开始":
+                raise ValueError
+        except Exception:
+            raise _error("live task is missing nonpending or changed") from None
+        try:
+            profile = ProductVisualProfile.from_dict(_load_json(Path(input_path)), task.platform)
+        except (TypeError, ValueError):
+            raise _error("visual profile is invalid") from None
+        resolution = {"source": "codex_visual_profile", "queries": list(profile.query_seeds), "visual_profile": profile.to_dict()}
+        if checkpoint["stage"] != "prepared":
+            if checkpoint["stages"].get("queries_resolved") != resolution:
+                raise _error("visual profile cannot be replaced")
+        else:
+            try:
+                store.save_stage(record_id, "queries_resolved", resolution)
+            except Exception:
+                raise _error("profile checkpoint could not be saved") from None
+        combined = dict(prepared)
+        combined["visual_profile"] = profile.to_dict()
+        combined["query_seeds"] = list(profile.query_seeds)
+        _write_json(absolute_run / "manifest.json", _manifest_payload(combined, profile.query_seeds))
+        return f"Imported profile for {record_id}"
+
+
+def _categories_compatible(source: str, candidate: str) -> bool | None:
+    if source == "womens_pants_set" and candidate == "womens_suit":
+        return None
+    return source == candidate
 
 
 def _detail_candidate(
@@ -672,7 +729,8 @@ def _detail_candidate(
 ) -> tuple[VerifiedCandidate | None, dict[str, object]]:
     if isinstance(raw, dict) and "evidence_refs" in raw:
         raise _error("evidence schema is invalid")
-    detail = _exact(raw, _DETAIL_KEYS, "detail")
+    modern = isinstance(profile, ProductVisualProfile)
+    detail = _exact(raw, _DETAIL_KEYS | ({"visual_category_code"} if modern else set()), "detail")
     identity = detail["identity"]
     if not isinstance(identity, str) or identity not in merged:
         raise _error("detail identity is not linked to observations")
@@ -689,6 +747,21 @@ def _detail_candidate(
         raise _error("detail rejection reason is invalid")
     if reason == "category_mismatch":
         raise _error("detail rejection reason is invalid")
+    if modern:
+        visual_category = detail["visual_category_code"]
+        if visual_category is not None and (not isinstance(visual_category, str) or visual_category not in CATEGORY_CODES):
+            raise _error("detail visual category is invalid")
+        compatible = None if visual_category is None else _categories_compatible(profile.category_code, visual_category)
+        if reason == "visual_structure_mismatch":
+            raise _error("detail rejection reason is invalid")
+        if reason == "visual_category_mismatch" and compatible is not False:
+            raise _error("category rejection requires a category mismatch")
+        if status_value == "qualified" and compatible is not True:
+            raise _error("qualified category is incompatible or ambiguous")
+        if reason == "imagery_ambiguous_or_inaccessible" and visual_category is not None:
+            raise _error("ambiguous imagery cannot claim category")
+        if reason == "detail_inaccessible" and visual_category is not None:
+            raise _error("inaccessible detail cannot claim category")
 
     detail_url = detail["detail_url"]
     explicit_id = detail["product_id"]
@@ -749,11 +822,13 @@ def _detail_candidate(
         "match_level": detail["match_level"],
         "visual_features": features,
     }
+    if modern:
+        normalized["visual_category_code"] = visual_category
 
     if status_value == "rejected":
         if detail["match_level"] is not None or detail["visual_features"] is not None:
             raise _error("rejected detail cannot contain match evidence")
-        if reason in {"visual_structure_mismatch", "metric_missing_or_ambiguous", "threshold_failure"}:
+        if reason in {"visual_structure_mismatch", "visual_category_mismatch", "metric_missing_or_ambiguous", "threshold_failure"}:
             if normalized_url is None or title is None:
                 raise _error("detail rejection reason requires visible detail identity and title")
         if reason == "imagery_ambiguous_or_inaccessible" and normalized_url is None:
@@ -962,7 +1037,7 @@ def _canonical_evidence_payload(
     candidates: list[VerifiedCandidate] = []
     normalized_details: list[dict[str, object]] = []
     detail_ids: set[str] = set()
-    profile = VisualProfile.from_dict(prepared["visual_profile"], task.platform)
+    profile = (ProductVisualProfile if "source_sha256" in prepared else VisualProfile).from_dict(prepared["visual_profile"], task.platform)
     qualifying_count = 0
     for index, raw_detail in enumerate(details):
         candidate, normalized = _detail_candidate(
@@ -1013,6 +1088,8 @@ def _validate_evidence_locked(run_dir, input_path, clock=None):
         prepared = _prepared_payload(checkpoint, record_id, absolute_run)
         if checkpoint["stage"] == "finalized":
             raise _error("finalized evidence cannot be replaced")
+        if "source_sha256" not in prepared:
+            raise _error("unfinished legacy checkpoint cannot be resumed")
         if checkpoint.get("version") != 2 or checkpoint["stage"] == "prepared":
             raise WorkflowError(NEXT_STEP)
         resolved, final_queries = _queries_resolved_payload(
@@ -1337,6 +1414,8 @@ def _finalize_locked(
         return legacy
     if checkpoint.get("version") != 2 or checkpoint["stage"] == "queries_resolved":
         raise WorkflowError(NEXT_STEP)
+    if "source_sha256" not in checkpoint["stages"]["prepared"] and checkpoint["stage"] != "finalized":
+        raise _error("unfinished legacy checkpoint cannot be resumed")
     if not dry_run:
         checkpoint = _migrate_legacy_evidence_digest_locked(
             store, checkpoint, absolute_run,
@@ -1506,6 +1585,9 @@ def _parser() -> argparse.ArgumentParser:
     prepare_parser.add_argument("--work-root", type=Path, default=Path(".work"))
     prepare_parser.add_argument("--dry-run", action="store_true")
     prepare_parser.add_argument("--restart-analysis", action="store_true")
+    import_parser = commands.add_parser("import-profile")
+    import_parser.add_argument("--run-dir", required=True, type=Path)
+    import_parser.add_argument("--input", required=True, type=Path)
     validate_parser = commands.add_parser("validate-evidence")
     validate_parser.add_argument("--run-dir", required=True, type=Path)
     validate_parser.add_argument("--input", required=True, type=Path)
@@ -1532,6 +1614,8 @@ def main(argv=None) -> int:
                 dry_run=arguments.dry_run,
                 restart_analysis=arguments.restart_analysis,
             )
+        elif arguments.command == "import-profile":
+            summary = import_profile(arguments.run_dir, arguments.input)
         elif arguments.command == "validate-evidence":
             summary = validate_evidence(arguments.run_dir, arguments.input)
         elif arguments.command == "resolve-queries":

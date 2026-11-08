@@ -61,7 +61,7 @@ Installation is manual:
 2. Select `chrome-extension/shein-evidence-collector`.
 3. Confirm host permission is exactly `https://us.shein.com/*`.
 4. Open the first exact-query SHEIN page and click the extension action. Enter the
-   task record ID, three ordered Ark queries byte-for-byte, a 30–50 card count,
+   task record ID, three ordered Codex profile queries byte-for-byte, a 30–50 card count,
    and `结果数量`.
 5. Collect each query in order, then recurring details in collector order.
 6. The collector downloads only `evidence.json`. Copy it to the run directory and
@@ -72,8 +72,7 @@ or visible-page failures pause collection and preserve the checkpoint.
 
 ## Search cards
 
-Use the three direct Ark manifest queries exactly. They are byte-for-byte equal
-to the ordered Ark seeds, never autocomplete suggestions or rewrites. Evidence
+Use the three validated Codex profile queries exactly, never autocomplete suggestions or rewrites. Evidence
 contains exactly 3 query blocks and 30–50 visible cards per query. Each block has
 30–50 observations. Ranks follow
 canonical visible order, with contiguous, unique visible ranks `1..N`, including
@@ -96,7 +95,7 @@ earliest rank, then identity. Each detail identity must be unique. Outcomes must
 be an exact prefix of that order and stop only at `结果数量` or pool exhaustion.
 
 Each detail has exactly `identity`, `status`, `reason`, `detail_url`, `product_id`,
-`title`, `category`, `sold_display`, `reviews_display`, `rating_display`,
+`title`, `category`, `visual_category_code`, `sold_display`, `reviews_display`, `rating_display`,
 `match_level`, and `visual_features`. `status` is `qualified` or `rejected`.
 A qualified outcome has null reason, a canonical detail-page URL, agreeing
 identity, visible detail title, required threshold-passing metrics, and match
@@ -110,7 +109,7 @@ must not enter
 or result visual text. `visual_features` contains structural/style facts such as
 neckline, sleeve, silhouette, construction, or use scene.
 
-A rejected outcome uses one reason: `visual_structure_mismatch`,
+A rejected outcome uses one reason: `visual_category_mismatch`,
 `imagery_ambiguous_or_inaccessible`, `metric_missing_or_ambiguous`,
 `threshold_failure`, `identity_changed`, or `detail_inaccessible`.
 `category_mismatch` is rejected. A threshold failure includes every required
@@ -118,12 +117,12 @@ metric and at least one value below the matching task threshold.
 
 Platform category text is raw audit evidence only and never qualifies or rejects
 a candidate. Platform `category` is verbatim audit evidence only; never compare
-its text with Ark `category` or `subtype`. Compare
-source and candidate imagery by silhouette, construction, and defining garment
-parts. Judge category compatibility from visible silhouette, construction, and
-defining garment parts. If imagery contradicts the Ark profile,
-use `visual_structure_mismatch`; if imagery cannot support judgment, use
-`imagery_ambiguous_or_inaccessible`.
+its text with profile `category` or `subtype`. Assign `visual_category_code`
+from candidate imagery and compare it to source `category_code`. Use
+`visual_category_mismatch` for a proven incompatible category and
+`imagery_ambiguous_or_inaccessible` when it cannot be determined. Visible blazer
+plus full-length pants is `womens_pants_set`. Sleeves, knots, neckline, fabric
+and leg shape cannot reject a same-category product.
 
 SHEIN requires unambiguous review count and rating displays that pass their task
 thresholds; sold count is optional and never filters or ranks a SHEIN candidate.
@@ -166,7 +165,7 @@ block.
     {"query": "cocktail dress", "observations": [{"query": "cocktail dress", "rank": 1, "is_ad": true, "title": "Fitted dress", "url": "https://us.shein.com/fitted-dress-p-12345.html", "product_id": "12345", "thumbnail_url": null}]}
   ],
   "details": [
-    {"identity": "shein-us:12345", "status": "qualified", "reason": null, "detail_url": "https://us.shein.com/fitted-dress-p-12345.html", "product_id": "12345", "title": "Fitted Mini Dress", "category": "mini dress", "sold_display": null, "reviews_display": "245", "rating_display": "4.8", "match_level": "高度相似", "visual_features": ["square neckline", "puff sleeves", "A-line silhouette"]}
+    {"identity": "shein-us:12345", "status": "qualified", "reason": null, "detail_url": "https://us.shein.com/fitted-dress-p-12345.html", "product_id": "12345", "title": "Fitted Mini Dress", "category": "mini dress", "visual_category_code": "dress", "sold_display": null, "reviews_display": "245", "rating_display": "4.8", "match_level": "高度相似", "visual_features": ["square neckline", "puff sleeves", "A-line silhouette"]}
   ]
 }
 ```

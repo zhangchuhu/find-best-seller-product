@@ -2,12 +2,13 @@
 
 (() => {
   const RECORD_ID = /^rec[A-Za-z0-9_-]+$/;
+  const CATEGORY_CODES = new Set(["dress", "formal_gown", "jumpsuit", "overalls", "womens_pants_set", "womens_shorts_set", "womens_skirt_set", "womens_suit", "top", "blouse", "shirt", "vest", "blazer", "jacket", "coat", "sweater", "cardigan", "pants", "shorts", "skirt", "shoes"]);
   const DETAIL_KEYS = [
-    "identity", "status", "reason", "detail_url", "product_id", "title", "category",
+    "identity", "status", "reason", "detail_url", "product_id", "title", "category", "visual_category_code",
     "sold_display", "reviews_display", "rating_display", "match_level", "visual_features",
   ];
   const REJECTION_REASONS = new Set([
-    "visual_structure_mismatch", "imagery_ambiguous_or_inaccessible",
+    "visual_category_mismatch", "imagery_ambiguous_or_inaccessible",
     "metric_missing_or_ambiguous", "threshold_failure", "identity_changed",
     "detail_inaccessible",
   ]);
@@ -138,15 +139,19 @@
     const qualified = detail.status === "qualified" && detail.reason === null;
     const rejected = detail.status === "rejected" && REJECTION_REASONS.has(detail.reason);
     if (!qualified && !rejected) throw new Error("detail status or reason is invalid");
+    if (detail.visual_category_code !== null && !CATEGORY_CODES.has(detail.visual_category_code)) throw new Error("visual category is invalid");
+    if (detail.reason === "imagery_ambiguous_or_inaccessible" && detail.visual_category_code !== null) throw new Error("ambiguous imagery cannot claim category");
+    if (detail.reason === "visual_category_mismatch" && detail.visual_category_code === null) throw new Error("category mismatch requires visual category");
     if (detail.reason === "identity_changed") {
       if (!detailUrlId || detailUrlId === expectedId || detail.product_id !== detailUrlId) throw new Error("detail identity binding failed");
     } else if (detail.reason === "detail_inaccessible") {
-      const absent = ["detail_url", "product_id", "title", "category", "sold_display", "reviews_display", "rating_display"];
+      const absent = ["detail_url", "product_id", "title", "category", "visual_category_code", "sold_display", "reviews_display", "rating_display"];
       if (absent.some((key) => detail[key] !== null)) throw new Error("inaccessible detail cannot claim visible fields");
     } else if (detail.product_id !== expectedId || detailUrlId !== expectedId) {
       throw new Error("detail identity binding failed");
     }
     if (qualified) {
+      if (!detail.visual_category_code) throw new Error("qualified detail requires visual category");
       if (!(["同款", "高度相似", "类似竞品"].includes(detail.match_level)) || !Array.isArray(detail.visual_features) || detail.visual_features.length === 0 || detail.visual_features.some((value) => typeof value !== "string" || !value.trim())) {
         throw new Error("qualified detail requires match evidence");
       }
@@ -206,6 +211,7 @@
       product_id: null,
       title: null,
       category: null,
+      visual_category_code: null,
       sold_display: null,
       reviews_display: null,
       rating_display: null,
@@ -219,7 +225,7 @@
     }
     const status = operator.status;
     return {...base, status, reason: status === "qualified" ? null : operator.reason, detail_url: visible.page_url,
-      product_id: visible.product_id, title: visible.title, category: visible.category, sold_display: visible.sold_display,
+      product_id: visible.product_id, title: visible.title, category: visible.category, visual_category_code: operator.visualCategoryCode || null, sold_display: visible.sold_display,
       reviews_display: visible.reviews_display, rating_display: visible.rating_display,
       match_level: status === "qualified" ? operator.matchLevel : null,
       visual_features: status === "qualified" ? operator.visualFeatures : null};
@@ -316,6 +322,7 @@
         const outcome = detailOutcomePlan(identity, visible, {
           status: selectedStatus,
           reason: selectedStatus === "qualified" ? null : element("detail-reason").value || null,
+          visualCategoryCode: element("visual-category-code").value || null,
           matchLevel: element("match-level").value || null,
           visualFeatures: element("visual-features").value.split("\n").filter(Boolean),
         });

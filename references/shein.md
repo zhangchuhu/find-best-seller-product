@@ -1,8 +1,8 @@
 # SHEIN US evidence
 
 Use the SHEIN US locale only. Search in English (`en-US`) with the three
-direct Ark manifest queries only: the ordered Ark seeds are the final queries.
-In the selected Chrome tab, navigate directly with each exact Ark manifest query;
+direct Codex profile queries only: the ordered profile seeds are the final queries.
+In the selected Chrome tab, navigate directly with each exact profile query;
 do not translate, rewrite, autocomplete, or reorder it.
 Color and size are not allowed
 in queries or visual comparison; visible color/size text may remain only
@@ -21,7 +21,7 @@ manually load the unpacked extension at `chrome-extension/shein-evidence-collect
 installation is never automated. Its manifest access must remain exactly
 `https://us.shein.com/*`. This collector is SHEIN-only and must not be used on Mercado Libre,
 another SHEIN locale, a non-SHEIN tab, or a hidden browser. It preserves the exact
-Ark queries, visible first-rank order, detail identity, and structured fields, then
+Codex profile queries, visible first-rank order, detail identity, and structured fields, then
 exports only `evidence.json`. It does not capture or export images. OCR is not a
 source for any structured field.
 
@@ -44,7 +44,6 @@ absent, and never use it for filtering or ranking. Search-result card metrics
 cannot replace detail-page verification. A missing required metric rejects the candidate.
 
 Reject seller or store statistics, a Best seller badge alone, ambiguous required
-review/rating metrics, identity change, inaccessible imagery, and a visual
-structure mismatch where the garment's silhouette, construction, or defining
-parts contradict the source profile. Category or breadcrumb wording is audit
+review/rating metrics, identity change, inaccessible imagery, and an incompatible
+visual category. Category or breadcrumb wording is audit
 evidence only and never overrides the image-based judgment.

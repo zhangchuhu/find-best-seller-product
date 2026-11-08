@@ -81,7 +81,7 @@ for (let queryIndex = 0; queryIndex < queries.length; queryIndex += 1) {
 }
 const detailUrl = "https://us.shein.com/dress-p-100001.html";
 api.addDetailOutcome(session, {identity: "shein-us:100001", status: "qualified", reason: null, detail_url: detailUrl,
-  product_id: "100001", title: "Puff Sleeve Mini Dress", category: "mini dress", sold_display: null,
+  product_id: "100001", title: "Puff Sleeve Mini Dress", category: "mini dress", visual_category_code: "dress", sold_display: null,
   reviews_display: "500", rating_display: "4.8", match_level: "同款", visual_features: ["puff sleeves", "bow"]});
 process.stdout.write(api.serializeEvidence(session));
 '''

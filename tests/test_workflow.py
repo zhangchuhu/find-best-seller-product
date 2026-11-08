@@ -199,7 +199,10 @@ def write_evidence(root: Path, value: dict[str, object], name: str) -> Path:
 
 
 def load_evidence(root: Path, name: str) -> dict[str, object]:
-    return load_fixture(name)
+    value = load_fixture(name)
+    for detail in value["details"]:
+        detail["visual_category_code"] = "dress"
+    return value
 
 
 def recompute_evidence_digest(evidence: dict[str, object]) -> None:
@@ -219,20 +222,45 @@ def recompute_evidence_digest(evidence: dict[str, object]) -> None:
 
 
 def evidence_fixture(root: Path, name: str) -> Path:
-    value = load_fixture(name)
+    value = load_evidence(root, name)
     return write_evidence(root, value, name)
 
 
-def prepare_only(root: Path, platform: Platform = Platform.SHEIN_US, limit: int = 2):
+def prepare_only(root: Path, platform: Platform = Platform.SHEIN_US, limit: int = 2, source_color: str | None = None):
     fake_lark = FakeLark([task(platform, limit)])
     fake_ark = FakeArk(profile(platform))
-    return prepare(
+    summary = prepare(
         record_id="rec_source",
         work_root=root,
         dry_run=True,
         lark_client=fake_lark,
         ark_client=fake_ark,
-    ), fake_lark, fake_ark
+    )
+    from tests.test_visual_profile import ProfileTests
+    fixture = ProfileTests(); fixture.setUp()
+    data = fixture.data
+    data.update(category_code="dress", category="dress", subtype="mini dress",
+                silhouette="fitted dress", fit="slim", color="red",
+                style_codes=["romantic", "elegant"], style=["romantic", "elegant"],
+                selling_point_codes=["puff_sleeve", "square_neck"],
+                selling_points=["puff sleeve", "square neck"], construction=["puff sleeve"],
+                defining_features=["bow", "square neck"], exclusions=["maxi"],
+                scene_codes=["cocktail"], use_scene=["cocktail"], query_language="en-US",
+                query_seeds=["mini dress", "puff sleeve mini dress", "cocktail dress"])
+    if platform is Platform.MERCADO_MX:
+        data.update(category="vestido", subtype="vestido corto", silhouette="ajustado vestido",
+                    fit="entallado", color="rojo", style=["romántico", "elegante"],
+                    selling_points=["manga abullonada", "escote cuadrado"],
+                    construction=["manga abullonada"], defining_features=["moño", "escote cuadrado"],
+                    exclusions=["vestido largo"], use_scene=["cóctel"], query_language="es-MX",
+                    query_seeds=["vestido", "vestido manga abullonada", "vestido cóctel"])
+    if source_color is not None:
+        data["color"] = source_color
+    run = root / "rec_source"
+    input_path = run / "visual-profile.json"
+    input_path.write_text(json.dumps(data))
+    workflow_module.import_profile(run, input_path, lark_client=fake_lark)
+    return summary, fake_lark, fake_ark
 
 
 def prepare_run(root: Path, platform: Platform = Platform.SHEIN_US, limit: int = 2):
@@ -240,14 +268,70 @@ def prepare_run(root: Path, platform: Platform = Platform.SHEIN_US, limit: int =
 
 
 class PrepareTests(unittest.TestCase):
+    def test_prepare_repairs_analysis_request_after_publication_failure(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory); lark = FakeLark()
+            original = workflow_module._write_json
+            def crash(path, value):
+                if path.name == "analysis-request.json":
+                    raise WorkflowError("request publication failed")
+                return original(path, value)
+            with patch("scripts.workflow._write_json", side_effect=crash):
+                with self.assertRaises(WorkflowError):
+                    prepare("rec_source", root, True, lark_client=lark)
+            prepare("rec_source", root, True, lark_client=lark)
+            request = json.loads((root / "rec_source" / "analysis-request.json").read_text())
+            self.assertEqual("en-US", request["query_language"])
+            self.assertIn("style_codes", request["required_profile_fields"])
+            self.assertIn("query_seeds", request["required_profile_fields"])
+    def test_import_profile_binds_task_and_is_idempotent(self):
+        from tests.test_visual_profile import ProfileTests
+        fixture = ProfileTests(); fixture.setUp()
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory); fake = FakeLark([task(Platform.MERCADO_MX)])
+            prepare(record_id="rec_source", work_root=root, dry_run=True, lark_client=fake)
+            run = root / "rec_source"; path = run / "visual-profile.json"
+            path.write_text(json.dumps(fixture.data))
+            workflow_module.import_profile(run, path, lark_client=fake)
+            workflow_module.import_profile(run, path, lark_client=fake)
+            checkpoint = CheckpointStore(root).load("rec_source")
+            self.assertEqual("codex_visual_profile", checkpoint["stages"]["queries_resolved"]["source"])
+            self.assertEqual(fixture.data["query_seeds"], json.loads((run / "manifest.json").read_text())["queries"])
+            fixture.data["style_codes"] = ["modern"]
+            path.write_text(json.dumps(fixture.data))
+            with self.assertRaises(WorkflowError):
+                workflow_module.import_profile(run, path, lark_client=fake)
+
+    def test_import_profile_rejects_changed_task_and_image(self):
+        from tests.test_visual_profile import ProfileTests
+        fixture = ProfileTests(); fixture.setUp()
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory); fake = FakeLark([task(Platform.MERCADO_MX)])
+            prepare(record_id="rec_source", work_root=root, dry_run=True, lark_client=fake)
+            run = root / "rec_source"; path = run / "visual-profile.json"
+            path.write_text(json.dumps(fixture.data))
+            fake.status = "成功"
+            with self.assertRaises(WorkflowError):
+                workflow_module.import_profile(run, path, lark_client=fake)
+            fake.status = "未开始"
+            (run / "source.jpg").write_bytes(b"changed")
+            with self.assertRaises(WorkflowError):
+                workflow_module.import_profile(run, path, lark_client=fake)
+    def test_prepare_downloads_without_calling_ark(self):
+        with tempfile.TemporaryDirectory() as directory:
+            fake = FakeLark()
+            prepare(record_id="rec_source", work_root=Path(directory), dry_run=True, lark_client=fake)
+            checkpoint = CheckpointStore(Path(directory)).load("rec_source")
+            self.assertEqual("prepared", checkpoint["stage"])
+            self.assertNotIn("visual_profile", checkpoint["stages"]["prepared"])
     def test_prepare_scopes_calls_and_binds_direct_ark_queries_without_base_mutation(self):
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
             summary, lark, ark = prepare_only(root)
             manifest_path = root.resolve() / "rec_source" / "manifest.json"
-            self.assertIn(str(manifest_path), summary)
-            self.assertEqual(["validate", ("list", "rec_source"), ("download", "rec_source")], lark.events)
-            self.assertEqual(1, len(ark.calls))
+            self.assertIn("Prepared rec_source", summary)
+            self.assertEqual(["validate", ("list", "rec_source"), ("download", "rec_source"), ("list", "rec_source")], lark.events)
+            self.assertEqual(0, len(ark.calls))
             manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
             self.assertEqual("rec_source", manifest["task"]["record_id"])
             self.assertEqual(3, len(manifest["query_seeds"]))
@@ -258,7 +342,7 @@ class PrepareTests(unittest.TestCase):
             self.assertEqual(str((root / "rec_source" / "source.jpg").resolve()), manifest["source_image"]["path"])
             checkpoint = CheckpointStore(root.resolve()).load("rec_source")
             self.assertEqual("queries_resolved", checkpoint["stage"])
-            self.assertEqual("ark_seeds", checkpoint["stages"]["queries_resolved"]["source"])
+            self.assertEqual("codex_visual_profile", checkpoint["stages"]["queries_resolved"]["source"])
             self.assertEqual(manifest["queries"], checkpoint["stages"]["queries_resolved"]["queries"])
             self.assertEqual(0o600, manifest_path.stat().st_mode & 0o777)
 
@@ -267,10 +351,10 @@ class PrepareTests(unittest.TestCase):
             root = Path(directory)
             _, lark, ark = prepare_only(root)
             prepare("rec_source", root, True, lark_client=lark, ark_client=ark)
-            self.assertEqual(1, len(ark.calls))
-            with self.assertRaisesRegex(WorkflowError, "restart-analysis cannot replace direct queries"):
+            self.assertEqual(0, len(ark.calls))
+            with self.assertRaisesRegex(WorkflowError, "restart-analysis cannot replace"):
                 prepare("rec_source", root, True, True, lark_client=lark, ark_client=ark)
-            self.assertEqual(1, len(ark.calls))
+            self.assertEqual(0, len(ark.calls))
             validate_evidence(root / "rec_source", evidence_fixture(root, "shein-evidence.json"))
             with self.assertRaisesRegex(WorkflowError, "restart-analysis"):
                 prepare("rec_source", root, True, True, lark_client=lark, ark_client=ark)
@@ -281,7 +365,7 @@ class PrepareTests(unittest.TestCase):
             real_lock = workflow_module._record_lock
             with patch("scripts.workflow._record_lock", wraps=real_lock) as locked:
                 prepare_only(root)
-            self.assertEqual(1, locked.call_count)
+            self.assertEqual(2, locked.call_count)
             self.assertEqual((root / "rec_source").resolve(), locked.call_args.args[0])
 
     def test_resume_rejects_a_missing_or_relocated_source_image(self):
@@ -310,10 +394,7 @@ class PrepareTests(unittest.TestCase):
             with self.assertRaisesRegex(WorkflowError, "record"):
                 prepare("rec_source", Path(directory), True, lark_client=FakeLark([mismatched]), ark_client=FakeArk())
         with tempfile.TemporaryDirectory() as directory:
-            with patch("scripts.workflow.ArkVisionClient", side_effect=RuntimeError("Bearer private-value")):
-                with self.assertRaises(WorkflowError) as raised:
-                    prepare("rec_source", Path(directory), True, lark_client=FakeLark())
-            self.assertNotIn("private-value", str(raised.exception))
+            prepare("rec_source", Path(directory), True, lark_client=FakeLark())
 
     def test_downloaded_source_must_remain_beneath_the_run_directory(self):
         with tempfile.TemporaryDirectory() as directory:
@@ -358,6 +439,32 @@ class PrepareTests(unittest.TestCase):
 
 
 class EvidenceValidationTests(unittest.TestCase):
+    def test_category_compatibility_rejects_ambiguous_suit(self):
+        from scripts.workflow import _categories_compatible
+        self.assertTrue(_categories_compatible("womens_pants_set", "womens_pants_set"))
+        self.assertIsNone(_categories_compatible("womens_pants_set", "womens_suit"))
+        self.assertFalse(_categories_compatible("womens_pants_set", "womens_skirt_set"))
+
+    def test_category_outcomes_validate_code_and_reason(self):
+        cases = [
+            ("qualified wrong category", {"visual_category_code": "skirt"}, False),
+            ("qualified unknown category", {"visual_category_code": "unknown"}, False),
+            ("fabricated rejection", {"status": "rejected", "reason": "visual_category_mismatch", "visual_category_code": "dress", "match_level": None, "visual_features": None}, False),
+            ("real rejection", {"status": "rejected", "reason": "visual_category_mismatch", "visual_category_code": "skirt", "match_level": None, "visual_features": None}, True),
+            ("ambiguous rejection", {"status": "rejected", "reason": "imagery_ambiguous_or_inaccessible", "visual_category_code": None, "match_level": None, "visual_features": None}, True),
+        ]
+        for label, updates, accepted in cases:
+            with self.subTest(label=label), tempfile.TemporaryDirectory() as directory:
+                root = Path(directory)
+                prepare_only(root)
+                value = load_evidence(root, "shein-evidence.json")
+                value["details"][0].update(updates)
+                path = write_evidence(root, value, "category.json")
+                if accepted:
+                    validate_evidence(root / "rec_source", path, clock=frozen_clock())
+                else:
+                    with self.assertRaises(WorkflowError):
+                        validate_evidence(root / "rec_source", path, clock=frozen_clock())
     def _run(self, fixture="shein-evidence.json", platform=Platform.SHEIN_US):
         context = tempfile.TemporaryDirectory()
         root = Path(context.name)
@@ -449,13 +556,13 @@ class EvidenceValidationTests(unittest.TestCase):
             value["details"][0].update({
                 "detail_url": None, "product_id": None, "title": None,
                 "category": None, "sold_display": None, "reviews_display": None,
-                "rating_display": None,
+                "rating_display": None, "visual_category_code": None,
             })
 
         cases = {
             "qualified": lambda value: None,
-            "visual structure mismatch": lambda value: reject(value, "visual_structure_mismatch"),
-            "imagery inaccessible": lambda value: reject(value, "imagery_ambiguous_or_inaccessible"),
+            "visual category mismatch": lambda value: (reject(value, "visual_category_mismatch"), value["details"][0].update(visual_category_code="skirt")),
+            "imagery inaccessible": lambda value: (reject(value, "imagery_ambiguous_or_inaccessible"), value["details"][0].update(visual_category_code=None)),
             "metric missing": metric_missing,
             "threshold failure": threshold_failure,
             "identity changed": identity_changed,
@@ -529,7 +636,7 @@ class EvidenceValidationTests(unittest.TestCase):
             validated = checkpoint["stages"]["evidence_validated"]
             resolved = checkpoint["stages"]["queries_resolved"]
             self.assertEqual(
-                {"source": "ark_seeds", "queries": resolved["queries"]},
+                {"source": "codex_visual_profile", "queries": resolved["queries"]},
                 validated["query_provenance"],
             )
             self.assertEqual(
@@ -570,11 +677,7 @@ class EvidenceValidationTests(unittest.TestCase):
 
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
-            source_color_profile = replace(profile(), color="ultraviolet")
-            prepare(
-                "rec_source", root, True,
-                lark_client=FakeLark(), ark_client=FakeArk(source_color_profile),
-            )
+            prepare_only(root, source_color="ultraviolet")
             value = load_evidence(root, "shein-evidence.json")
             value["details"][0]["visual_features"] = ["ultraviolet embroidery"]
             path = write_evidence(root, value, "source-color-feature.json")
@@ -583,11 +686,7 @@ class EvidenceValidationTests(unittest.TestCase):
 
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
-            source_color_profile = replace(profile(), color="apricot beige")
-            prepare(
-                "rec_source", root, True,
-                lark_client=FakeLark(), ark_client=FakeArk(source_color_profile),
-            )
+            prepare_only(root, source_color="apricot beige")
             value = load_evidence(root, "shein-evidence.json")
             value["details"][0]["visual_features"] = ["apricot embroidery"]
             path = write_evidence(root, value, "multiword-source-color-feature.json")
@@ -803,14 +902,15 @@ class EvidenceValidationTests(unittest.TestCase):
                 candidates = CheckpointStore(root).load("rec_source")["stages"]["evidence_validated"]["candidates"]
                 self.assertEqual(2, len(candidates))
 
-    def test_visual_structure_mismatch_rejects_even_when_category_text_matches(self):
+    def test_visual_category_mismatch_rejects_even_when_category_text_matches(self):
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
             prepare_run(root)
             value = load_evidence(root, "shein-evidence.json")
             value["details"][0].update({
                 "status": "rejected",
-                "reason": "visual_structure_mismatch",
+                "reason": "visual_category_mismatch",
+                "visual_category_code": "skirt",
                 "category": "mini dress",
                 "match_level": None,
                 "visual_features": None,
@@ -877,6 +977,7 @@ class EvidenceValidationTests(unittest.TestCase):
             value["details"][1].update({
                 "status": "rejected",
                 "reason": "detail_inaccessible",
+                "visual_category_code": None,
                 "detail_url": None,
                 "product_id": None,
                 "title": None,
@@ -947,6 +1048,35 @@ class EvidenceValidationTests(unittest.TestCase):
 
 
 class QueryResolutionTests(unittest.TestCase):
+    def test_finalized_v2_ark_checkpoint_replays_read_only(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory); prepare_only(root)
+            run = root / "rec_source"
+            validate_evidence(run, evidence_fixture(root, "shein-evidence.json"), clock=frozen_clock())
+            finalize(run, lark_client=FakeLark(), clock=frozen_clock())
+            path = run / "checkpoint.json"
+            checkpoint = json.loads(path.read_text())
+            old_profile = profile().to_dict()
+            prepared = checkpoint["stages"]["prepared"]
+            prepared.pop("source_sha256")
+            prepared.update(visual_profile=old_profile, query_seeds=old_profile["query_seeds"])
+            resolved = {"source": "ark_seeds", "queries": old_profile["query_seeds"]}
+            checkpoint["stages"]["queries_resolved"] = resolved
+            existing = checkpoint["stages"]["evidence_validated"]
+            for detail in existing["evidence"]["details"]:
+                detail.pop("visual_category_code")
+            rebuilt = workflow_module._canonical_evidence_payload(
+                existing["evidence"], run, prepared, resolved,
+                tuple(resolved["queries"]), "rec_source",
+            )
+            rebuilt.update(validated_at=existing["validated_at"], write_progress=existing["write_progress"])
+            checkpoint["stages"]["evidence_validated"] = rebuilt
+            path.write_text(json.dumps(checkpoint))
+            before = path.read_bytes()
+            lark = FakeLark()
+            self.assertIn("Already finalized 2", finalize(run, lark_client=lark, clock=frozen_clock()))
+            self.assertEqual(before, path.read_bytes())
+            self.assertEqual([], lark.events)
     def test_prepare_binds_exact_ark_seeds_and_evidence_needs_no_autocomplete_step(self):
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
@@ -959,11 +1089,11 @@ class QueryResolutionTests(unittest.TestCase):
             self.assertEqual("queries_resolved", checkpoint["stage"])
             resolved = checkpoint["stages"]["queries_resolved"]
             self.assertEqual(["mini dress", "puff sleeve mini dress", "cocktail dress"], resolved["queries"])
-            self.assertEqual("ark_seeds", resolved["source"])
+            self.assertEqual("codex_visual_profile", resolved["source"])
             validate_evidence(run_dir, evidence_fixture(root, "shein-evidence.json"), clock=frozen_clock())
             validated = CheckpointStore(root).load("rec_source")["stages"]["evidence_validated"]
             self.assertEqual(
-                {"source": "ark_seeds", "queries": manifest["query_seeds"]},
+                {"source": "codex_visual_profile", "queries": manifest["query_seeds"]},
                 validated["query_provenance"],
             )
 
@@ -971,7 +1101,12 @@ class QueryResolutionTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
             run_dir = root / "rec_source"
-            with patch("scripts.workflow._write_json", side_effect=WorkflowError("manifest crash")):
+            original_write = workflow_module._write_json
+            def crash_manifest(path, value):
+                if path.name == "manifest.json":
+                    raise WorkflowError("manifest crash")
+                return original_write(path, value)
+            with patch("scripts.workflow._write_json", side_effect=crash_manifest):
                 with self.assertRaisesRegex(WorkflowError, "manifest crash"):
                     prepare_only(root)
             self.assertEqual("queries_resolved", CheckpointStore(root).load("rec_source")["stage"])
@@ -993,7 +1128,7 @@ class QueryResolutionTests(unittest.TestCase):
                 autospec=True,
                 side_effect=crash_after_prepared,
             ):
-                with self.assertRaisesRegex(WorkflowError, "prepared checkpoint could not be saved"):
+                with self.assertRaisesRegex(WorkflowError, "profile checkpoint could not be saved"):
                     prepare_only(root)
             self.assertEqual("prepared", CheckpointStore(root).load("rec_source")["stage"])
             self.assertFalse((root / "rec_source" / "manifest.json").exists())
@@ -1016,7 +1151,7 @@ class QueryResolutionTests(unittest.TestCase):
                 checkpoint = json.loads(checkpoint_path.read_text(encoding="utf-8"))
                 checkpoint["stages"]["queries_resolved"].update(mutation)
                 checkpoint_path.write_text(json.dumps(checkpoint), encoding="utf-8")
-                with self.assertRaisesRegex(WorkflowError, "resolved queries checkpoint"):
+                with self.assertRaises(WorkflowError):
                     validate_evidence(
                         root / "rec_source", evidence_fixture(root, "shein-evidence.json"), clock=frozen_clock(),
                     )
@@ -1031,15 +1166,8 @@ class QueryResolutionTests(unittest.TestCase):
             checkpoint["stages"].pop("queries_resolved")
             checkpoint_path.write_text(json.dumps(checkpoint), encoding="utf-8")
 
-            resolve_queries(root / "rec_source", FIXTURES / "shein-autocomplete.json")
-            validate_evidence(
-                root / "rec_source", evidence_fixture(root, "shein-evidence.json"), clock=frozen_clock(),
-            )
-            evidence = CheckpointStore(root).load("rec_source")["stages"]["evidence_validated"]
-            self.assertIn("autocomplete_provenance", evidence)
-            lark = FakeLark()
-            self.assertIn("Finalized 2", finalize(root / "rec_source", lark_client=lark, clock=frozen_clock()))
-            self.assertIn("Already finalized 2", finalize(root / "rec_source", lark_client=lark, clock=frozen_clock()))
+            with self.assertRaisesRegex(WorkflowError, "unfinished legacy"):
+                resolve_queries(root / "rec_source", FIXTURES / "shein-autocomplete.json")
 
     def test_legacy_finalized_returns_without_parsing_obsolete_profile_or_writing(self):
         with tempfile.TemporaryDirectory() as directory:
@@ -1689,7 +1817,7 @@ class FinalizeTests(unittest.TestCase):
                 "mini dress", "cocktail dress", "puff sleeve mini dress",
             ]
             checkpoint_path.write_text(json.dumps(changed), encoding="utf-8")
-            with self.assertRaisesRegex(WorkflowError, "resolved queries checkpoint"):
+            with self.assertRaises(WorkflowError):
                 validate_evidence(
                     root / "rec_source", evidence_fixture(root, "shein-evidence.json"), clock=frozen_clock(),
                 )

@@ -2,8 +2,8 @@
 
 **Legacy compatibility only.** This reference supports reading an already
 autocomplete-resolved version-2 checkpoint through the retained
-`resolve-queries` compatibility command. It is not part of a new direct-Ark
-run: new runs use the three final Ark manifest queries without autocomplete.
+`resolve-queries` compatibility command. New runs use the three validated
+Codex profile queries without autocomplete.
 
 Collect this evidence only from the visible autocomplete panel in the
 explicitly selected Chrome session for the target marketplace. Do not use a
@@ -12,7 +12,7 @@ generic search engine. A CAPTCHA, sign-in, or region wall must be resolved by
 the user in that same Chrome session before collection continues.
 
 Autocomplete display order is only a platform-derived traffic-intent proxy; it
-is not numeric search volume. For each of the three prepared Ark semantic
+is not numeric search volume. For each of the three historical prepared semantic
 seeds, first clear the platform's search box, then type that seed and wait for
 the visible panel. Capture 1–10 visible suggestions in displayed order, with
 ranks starting at 1. Never append one seed to text left by another. Record
