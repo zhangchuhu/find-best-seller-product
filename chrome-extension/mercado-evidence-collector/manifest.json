@@ -1,0 +1,16 @@
+{
+  "manifest_version": 3,
+  "name": "Mercado Libre México Local Evidence Collector",
+  "version": "0.1.0",
+  "permissions": ["activeTab", "downloads"],
+  "host_permissions": ["https://www.mercadolibre.com.mx/*", "https://listado.mercadolibre.com.mx/*", "https://articulo.mercadolibre.com.mx/*"],
+  "action": {
+    "default_title": "Collect Mercado Libre evidence",
+    "default_popup": "collector.html"
+  },
+  "content_scripts": [{
+    "matches": ["https://www.mercadolibre.com.mx/*", "https://listado.mercadolibre.com.mx/*", "https://articulo.mercadolibre.com.mx/*"],
+    "js": ["content.js"],
+    "run_at": "document_idle"
+  }]
+}

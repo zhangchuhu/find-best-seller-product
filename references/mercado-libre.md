@@ -14,7 +14,7 @@ Capture visible card order without moving advertisements. Visible
 `Patrocinado` means `is_ad: true`; a visibly organic card means `false`; use
 no null/unknown value: `is_ad` must be an unambiguous boolean. If the page does
 not make the state visible, reject/stop the card rather than recording it. Identity is the normalized
-`MLM` product identifier when encoded in the URL. An explicit ID must normalize
+`MLM` listing or `MLMU` catalog identifier encoded in the URL; do not equate them. An explicit ID must normalize
 to the same `MLM` identity as the URL; reject an identity change between search
 card and detail page. A qualified outcome preserves the canonical detail URL,
 explicit ID when visible, visible detail title, and raw category text when

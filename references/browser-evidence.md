@@ -67,10 +67,35 @@ Installation is manual:
 6. The collector downloads only `evidence.json`. Copy it to the run directory and
    run `validate-evidence`.
 
-The collector is SHEIN-only. Login, CAPTCHA, authentication, region, identity,
-or visible-page failures pause collection and preserve the checkpoint.
+Login, CAPTCHA, authentication, region, identity, or visible-page failures pause
+collection and preserve the checkpoint.
+
+## Local Mercado Libre México collector
+
+Use `chrome-extension/mercado-evidence-collector` in the user's selected Chrome
+profile. Load it manually through `chrome://extensions` with Developer mode;
+its host permissions are limited to the `www`, `listado` and `articulo`
+Mercado Libre México hosts. No cookies, network interception, or private APIs.
+
+Open the first exact Codex query on `listado.mercadolibre.com.mx` and launch the
+extension. Enter the record ID, three exact ordered queries, card count and task
+result limit. Keep the original target tab open: collect each search in order,
+manually navigating that same tab to each next exact query. The extension reads
+the visible search input, cards and ad labels, then displays the next recurring
+product URL in the required review order. Copy it into the original target tab.
+Inspect its visible garment imagery and enter the Codex visual category, match
+level and features; select the appropriate rejection reason when applicable.
+The extension reads the detail page's visible product sales and optional metrics.
+Continue until the result limit or the recurring pool is exhausted, download
+`evidence.json`, copy it into the run directory and run `validate-evidence`.
+The validator remains authoritative for thresholds and category. If data is
+missing, ambiguous, inaccessible, or the page layout cannot be read, do not
+invent values; preserve the checkpoint and report the failure. Collector state
+is in its window, so keep that window open during navigation.
 
 ## Search cards
+
+Use the three validated, color/size-free queries without rewriting. No autocomplete collection, suggestion ranking, query rewriting, translation, or traffic-volume claim.
 
 Use the three validated Codex profile queries exactly, never autocomplete suggestions or rewrites. Evidence
 contains exactly 3 query blocks and 30–50 visible cards per query. Each block has

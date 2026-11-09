@@ -1208,3 +1208,22 @@ class LarkWriteTests(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+class EmptyResultReadbackTests(unittest.TestCase):
+    def test_empty_optional_text_fields_may_read_back_as_null(self):
+        payload = {'评价数': '', '评分': '', '标题': 'Vestido'}
+        self.assertEqual([], LarkBaseClient._result_payload_mismatches({'评价数': None, '评分': None, '标题': 'Vestido'}, payload))
+        self.assertEqual(['标题'], LarkBaseClient._result_payload_mismatches({'评价数': None, '评分': None, '标题': None}, payload))
+
+class MissingCreatedIdTests(unittest.TestCase):
+    def test_resolves_created_record_by_exact_business_key_when_response_has_no_id(self):
+        client = LarkBaseClient(runner=FakeRunner([]))
+        task, candidate = sample_task(), sample_candidate()
+        row = {'_record_id': 'rec-new', **client._result_payload(task, candidate), '原图': []}
+        with tempfile.TemporaryDirectory() as directory:
+            source = Path(directory) / 'look.jpg'
+            source.write_bytes(b'image-data')
+            with mock.patch.object(client, 'find_existing_result', side_effect=[None, row]), mock.patch.object(client, '_invoke', return_value={}), mock.patch.object(client, '_get_result', return_value=row), mock.patch.object(client, '_has_matching_attachment_content', return_value=True):
+                result = client.write_result(task, candidate, source)
+        self.assertEqual('rec-new', result.record_id)
+        self.assertTrue(result.created)

@@ -211,10 +211,11 @@
       if (!text || !Array.isArray(entry.bbox)) continue;
       let matched = false;
       if (entry.kind === "reviews") {
-        const match = /([\d,.]+)\s*(?:reviews?|ratings?)/i.exec(text);
+        const match = /([\d,.]+\+?)\s*(?:reviews?|ratings?)/i.exec(text);
         if (match) { reviews ??= match[1]; matched = true; }
       } else if (entry.kind === "rating") {
-        const match = /(?:^|\brating\s*:?\s*)([0-5](?:\.\d+)?)\s*(?:out\s+of|\/)\s*5\b/i.exec(text)
+        const match = /\baverage\s+rating\s*:?\s*([0-5](?:\.\d+)?)\b/i.exec(text)
+          || /(?:^|\brating\s*:?\s*)([0-5](?:\.\d+)?)\s*(?:out\s+of|\/)\s*5\b/i.exec(text)
           || /^\s*rating\s*:?\s*([0-5](?:\.\d+)?)\s*$/i.exec(text)
           || /^\s*([0-5](?:\.\d+)?)\s*$/.exec(text);
         if (match) { rating ??= match[1]; matched = true; }

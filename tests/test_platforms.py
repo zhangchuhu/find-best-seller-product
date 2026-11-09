@@ -99,3 +99,10 @@ class ProductIdentityTests(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+class MercadoCatalogIdentityTests(unittest.TestCase):
+    def test_catalog_and_listing_identifiers_remain_distinct_and_bind_to_url(self):
+        url = 'https://www.mercadolibre.com.mx/vestido/up/MLMU3819941570'
+        self.assertEqual(product_identity(Platform.MERCADO_MX, url), 'mercado-libre-mx:MLMU3819941570')
+        self.assertEqual(product_identity(Platform.MERCADO_MX, url, 'MLMU3819941570'), 'mercado-libre-mx:MLMU3819941570')
+        self.assertNotEqual(product_identity(Platform.MERCADO_MX, url), product_identity(Platform.MERCADO_MX, 'https://articulo.mercadolibre.com.mx/MLM-3819941570-vestido'))

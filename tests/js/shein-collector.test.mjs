@@ -107,6 +107,16 @@ test("visible metrics bind only explicitly typed metric text", () => {
   assert.equal(metrics.rating_display, "4.8");
 });
 
+test("reads SHEIN review lower bounds and average rating labels", () => {
+  const {extractVisibleMetrics} = loadClassicScript(CONTENT);
+  const metrics = extractVisibleMetrics([
+    {kind: "reviews", text: "100+ Reviews", bbox: [0, 0, 100, 20]},
+    {kind: "rating", text: "Average Rating 4.62 100+ Reviews", bbox: [0, 25, 200, 20]},
+  ]);
+  assert.equal(metrics.reviews_display, "100+");
+  assert.equal(metrics.rating_display, "4.62");
+});
+
 test("collector emits only the four-field structured evidence contract", () => {
   const api = loadClassicScript(COLLECTOR);
   const {session, queries} = populatedSession(api);

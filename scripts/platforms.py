@@ -45,7 +45,7 @@ _TRACKING_KEYS = {
     "twclid",
     "wbraid",
 }
-_MERCADO_ID_RE = re.compile(r"(?i)(?<![a-z0-9])MLM[-_ ]*(\d+)(?!\d)")
+_MERCADO_ID_RE = re.compile(r"(?i)(?<![a-z0-9])(MLMU?)[-_ ]*(\d+)(?!\d)")
 _SHEIN_PATH_ID_RE = re.compile(r"(?i)-p-(\d+)(?:\.html)?(?:/|$)")
 
 
@@ -115,9 +115,9 @@ def _explicit_product_id(platform: Platform, explicit_id: str) -> str:
         raise ValueError("explicit product ID must be a non-empty string")
     text = explicit_id.strip()
     if platform is Platform.MERCADO_MX:
-        match = re.fullmatch(r"(?i)MLM[-_ ]*(\d(?:[-_ ]*\d)*)", text)
+        match = re.fullmatch(r"(?i)(MLMU?)[-_ ]*(\d(?:[-_ ]*\d)*)", text)
         if match:
-            return f"MLM{re.sub(r'[-_ ]', '', match.group(1))}"
+            return f"{match.group(1).upper()}{re.sub(r'[-_ ]', '', match.group(2))}"
     elif platform is Platform.SHEIN_US:
         match = re.fullmatch(r"(?i)(?:(?:goods|product|p)[-_ ]*)?(\d+)", text)
         if match:
@@ -129,7 +129,7 @@ def _url_product_id(platform: Platform, url: str) -> str | None:
     parsed = urlsplit(url)
     if platform is Platform.MERCADO_MX:
         match = _MERCADO_ID_RE.search(parsed.path)
-        return f"MLM{match.group(1)}" if match else None
+        return f"{match.group(1).upper()}{match.group(2)}" if match else None
     match = _SHEIN_PATH_ID_RE.search(parsed.path)
     if match:
         return match.group(1)

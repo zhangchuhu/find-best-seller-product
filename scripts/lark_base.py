@@ -796,6 +796,8 @@ class LarkBaseClient:
         mismatches: list[str] = []
         for name, expected in payload.items():
             actual = row.get(name)
+            if name in {"评价数", "评分", "vendidos 数"} and expected == "" and actual is None:
+                continue
             if name == "爆款链接" and isinstance(actual, str):
                 markdown = _MARKDOWN_LINK.fullmatch(actual)
                 if markdown:
@@ -846,7 +848,13 @@ class LarkBaseClient:
         try:
             upsert_data = self._invoke("result record-upsert", arguments)
             if result_id is None:
-                result_id = self._created_record_id(upsert_data)
+                try:
+                    result_id = self._created_record_id(upsert_data)
+                except LarkBaseError:
+                    created_row = self.find_existing_result(task.sku, candidate.platform, payload["爆款链接"])
+                    result_id = created_row.get("_record_id") if created_row is not None else None
+                    if not isinstance(result_id, str) or not result_id:
+                        raise LarkBaseError("result record-upsert returned no record ID and lookup failed") from None
             current = existing if existing is not None else self._get_result(result_id)
             source_hash = self._file_sha256(source_image)
             attachment_uploaded = False
