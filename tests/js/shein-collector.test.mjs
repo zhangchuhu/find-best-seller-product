@@ -187,3 +187,30 @@ test("extension package contains no screenshot capture path and downloads JSON o
     assert.equal(source.includes(forbidden), false, `${forbidden} must be absent`);
   assert.equal((source.match(/chrome\.downloads\.download/g) || []).length, 1);
 });
+
+test("detail extraction reads the visible product rating button accessible label", () => {
+  const box = {left: 10, top: 10, right: 300, bottom: 50, width: 290, height: 40};
+  const element = (text, attributes = {}) => ({innerText: text, textContent: text,
+    getBoundingClientRect: () => box, getAttribute: name => attributes[name] || null});
+  const title = element('Silquee Lace-Paneled Blazer And Sheer Lace Skirt');
+  const ratingButton = element('(5 Reviews)', {'aria-label': 'Average Rating 5.00 5 Reviews'});
+  const {extractDetail} = loadClassicScript(CONTENT, {
+    innerWidth: 1200, innerHeight: 800, devicePixelRatio: 1,
+    getComputedStyle: () => ({visibility: 'visible', display: 'block', opacity: '1'}),
+    location: {href: 'https://us.shein.com/suit-p-555957730.html'},
+    document: {querySelectorAll: selector => {
+      if (selector === 'h1') return [title];
+      if (selector.includes('[aria-label*="review"') || selector.includes('[aria-label*="rating"')) return [ratingButton];
+      return [];
+    }},
+  });
+  const result = extractDetail('shein-us:555957730');
+  assert.equal(result.title, 'Silquee Lace-Paneled Blazer And Sheer Lace Skirt');
+  assert.equal(result.reviews_display, '5');
+  assert.equal(result.rating_display, '5.00');
+});
+
+test("review section heading exposes parenthesized count", () => {
+  const {extractVisibleMetrics} = loadClassicScript(CONTENT);
+  assert.equal(extractVisibleMetrics([{kind: 'reviews', text: 'Customer Reviews (15) View More', bbox: [0,0,100,20]}]).reviews_display, '15');
+});

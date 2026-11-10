@@ -211,7 +211,8 @@
       if (!text || !Array.isArray(entry.bbox)) continue;
       let matched = false;
       if (entry.kind === "reviews") {
-        const match = /([\d,.]+\+?)\s*(?:reviews?|ratings?)/i.exec(text);
+        const match = /([\d,.]+\+?)\s*(?:reviews?|ratings?)/i.exec(text)
+          || /\bcustomer\s+reviews?\s*\(\s*([\d,.]+\+?)\s*\)/i.exec(text);
         if (match) { reviews ??= match[1]; matched = true; }
       } else if (entry.kind === "rating") {
         const match = /\baverage\s+rating\s*:?\s*([0-5](?:\.\d+)?)\b/i.exec(text)
@@ -252,6 +253,15 @@
         const text = visibleText(element);
         const bbox = isVisible(element) ? normalizeBox(element.getBoundingClientRect(), viewport) : null;
         if (text && text.length <= 120 && bbox) metricEntries.push({kind, text, bbox});
+        // Accessible labels belong to visible controls; do not read hidden DOM
+        // or data-rating values as a substitute for displayed product evidence.
+        if (bbox) {
+          const label = (element.getAttribute("aria-label") || "").trim();
+          if (label && label.length <= 120 && /\baverage\s+rating\b/i.test(label)) {
+            metricEntries.push({kind: "rating", text: label, bbox});
+            metricEntries.push({kind: "reviews", text: label, bbox});
+          }
+        }
       }
     }
     const metrics = extractVisibleMetrics(metricEntries);
@@ -292,6 +302,7 @@
       classifyVisibleAd,
       mergeFirstVisible,
       extractVisibleMetrics,
+      extractDetail,
     });
   }
 
